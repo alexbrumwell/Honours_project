@@ -396,10 +396,240 @@ Check: Job ID: clustalo-I20221209-134632-0861-65896462-p1m  >> ERROR NO INPUT
 
 ## 10/12/22
 Call with Anubhab, he aligned the FASTAs for me using MUSCLE.
+I downloaded PopART but the "minimum spanning network" option keeps crashing.
 
-Submitted sorting of Y-chromosomes:
+Submitted sorting of Y-chromosomes @young:
 ```bash
 cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $1}' | while read name ; do
   samtools view -q 30 -u /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y.sam | samtools sort -n -o /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted.bam &
 done
 ```
+
+## 13/12/22
+Resubmitted sorting of Y-chromosomes @young (11:15h):
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $1}' | while read name ; do
+  samtools view -q 30 -u /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y.sam | samtools sort -n -o /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted.bam &
+done
+```
+
+## 18/12/22
+Submitted samtools merge of Y-chromosome files:
+```bash
+samtools merge <output file> <input files>
+```
+
+Then I make a new ID list called "List_Y-chromosome_merged.txt"
+
+Submitted markdup of Y-chromsome files (20:34h):
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name ; do
+  samtools fixmate -m /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted.bam - | \
+  samtools sort - | \
+  samtools markdup - /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam &
+done
+```
+
+
+
+## 20/12/22
+Submitted indexing of Y-chromosome:
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name ; do
+  samtools index /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam &
+done
+```
+
+Submitted Qualimap of Y-chromosomes (14:57h):
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name ; do
+  qualimap bamqc -bam /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam --java-mem-size=200G 2>/shared5/Alex/Y-chromosome_project/BAMs/log_files/${name}_qualimap.log &
+done
+```
+
+Check Qualimap of Y-chromosomes:
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
+  paste <(echo ${name}) <(ls -lh /shared5/Alex/Y-chromosome_project/BAMs/${name}*stats/genome_results.txt)
+done
+
+#the following indiivudals have not run correctly:
+S276023_EDSW200015547-1a2a_HJFWVDSXY_L3L4_qualimap.log
+ERR1735862_qualimap.log
+ERR1545189_qualimap.log
+ERR2179547_qualimap.log
+ERR2731057_qualimap.log
+
+I run qualimap individually on these sequences.
+```
+
+## 21/12/22
+To check how many unmapped reads in BAM files:
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
+  samtools view -c -f 4 ${name}*markdup*bam;
+done
+```
+
+Submitted consensus FASTA calling (11:28h):
+```bash
+#first make list with coverage data
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
+  coverage=$(cat /shared5/Alex/Y-chromosome_project/BAMs/${name}*stats/genome_results.txt | grep "mean coverageData"  | awk '{print $4}' | sed 's/X//' | sed 's/,//' | cut -d "." -f 1);
+  paste <(echo ${name}) <(echo ${coverage}) <(echo "${coverage} * 2" | bc);
+done > /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt
+
+#then call consensus FASTAS
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
+  name=$(echo ${line} | awk '{print $1}');
+  number=$(echo ${line} | awk '{print $(NF-1)}');
+  maxnumber=$(echo ${line} | awk '{print $(NF)}');
+ angsd -i /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam -minMapQ 30 -minQ 20 -setMinDepth ${number} -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta -out /shared5/Alex/Y-chromosome_project/FASTAs/${name}_Y &
+done
+
+#uncompress the FASTAs
+gunzip *fa.gz
+
+#add corresponding breed to chromosome_ID_depth_list.txt
+paste <(cat Y-chromosome_ID_depth_list.txt) <(echo "Exmoor
+Exmoor
+...") > tmp.txt && mv tmp.txt Y-chromosome_ID_depth_list.txt
+
+#change header
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
+  name=$(echo $line | awk '{print $1}');
+  breed=$(echo $line | awk '{print $4}');
+  sed -i "s/>MH341179.1/>${name}_${breed}_MH341179.1/g" /shared5/Alex/Y-chromosome_project/FASTAs/${name}_Y.fa
+done
+
+#concatented FASTAs
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | awk '{print $1}' | while read name; do
+  cat /shared5/Alex/Y-chromosome_project/FASTAs/${name}_Y.fa
+done >> Exmoor_horse_Y.fa
+
+#added reference sequence
+cat /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta Exmoor_horse_Y.fa > tmp.fa && mv tmp.fa Exmoor_horse_Y.fa
+
+#copy to local disk
+scp studentprojects@young.eng.gla.ac.uk:/shared5/Alex/Y-chromosome_project/FASTAs/Exmoor_horse_Y.fa ./Desktop
+```
+
+To check how many lines in each FASTA have clear base pairs:
+```bash
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | awk '{print $1}' | while read name; do
+grep -v "NNNNN" /shared5/Alex/Y-chromosome_project/FASTAs/${name}_Y.fa | wc -l ;
+done
+```
+
+To get only the reference and Exmoor sequences from the Y-chromosome FASTA, I do:
+```bash
+grep -n ">" Exmoor_horse_Y.fa #to get the line number of each headers
+
+sed -n 1,2978723p Exmoor_horse_Y.fa > Exmoor_Y.fa #prints only lines containing sequences that I'm interested in
+```
+
+
+## 24/12/22
+Submitted mapping of Exmoor sequences to horse reference mitogenome (12:52h):
+```bash
+cat /shared5/Alex/Mitochondrial_project/Mitochondrial_list.txt | grep "Exmoor" | awk '{print $2}' | while read file ; do
+  location=$(echo ${file} | awk -F "/" '{$NF=""}1' OFS="/") ;
+  name=$(echo ${file} | awk -F "/" '{print $NF}' | sed 's/_1_val_1.fq.gz//');
+  bwa mem /shared5/Alex/Mitochondrial_project/horse_mtdna_reference/horse_mtdna_reference.fasta
+  ${location}${name}_1_val_1.fq.gz
+  ${location}${name}_2_val_2.fq.gz
+  2> /shared5/Alex/Mitochondrial_project/BAMs_horseref/log_files/${name}.bwamem.log
+  > /shared5/Alex/Mitochondrial_project/BAMs_horseref/${name}_mtdna_horseref.sam &
+done
+```
+
+
+## 27/12/22
+Submitted sorting of mitochondrial Exmoor sequences mapped to horse ref:
+```bash
+cat /shared5/Alex/Mitochondrial_project/Mitochondrial_list.txt | grep "Exmoor" | awk '{print $1}' | while read name ; do
+  samtools view -q 30 -u /shared5/Alex/Mitochondrial_project/BAMs_horseref/${name}_mtdna_horseref.sam | samtools sort -n -o /shared5/Alex/Mitochondrial_project/BAMs_horseref/${name}_sorted_mtdna_horseref.bam &
+done
+```
+
+## 30/12/22
+Merged Exmoor sequences horse_ref:
+```bash
+cat tmp.txt | while read name; do
+  samtools merge ${name}_merged_sorted_mtdna_horseref.bam $(ls /shared5/Alex/Mitochondrial_project/BAMs_horseref/$name*sorted*bam);
+done
+```
+
+Submitted markdup of Exmoor sequences horse_ref (10:30h):
+```bash
+cat /shared5/Alex/Mitochondrial_project/List_mitochondrial_merged.txt | grep "Exmoor" | awk '{print $1}' | while read name ; do
+  samtools fixmate -m /shared5/Alex/Mitochondrial_project/BAMs_horseref/${name}_sorted_mtdna_horseref.bam - | samtools sort - | samtools markdup - /shared5/Alex/Mitochondrial_project/BAMs_horseref/${name}_markdup_sorted_mtdna_horseref.bam &
+done
+```
+
+Submitted qualimap of Exmoor sequences horse_ref (10:38h):
+```bash
+cat /shared5/Alex/Mitochondrial_project/List_mitochondrial_merged.txt | grep "Exmoor" | awk '{print $1}' | while read name ; do
+  qualimap bamqc -bam /shared5/Alex/Mitochondrial_project/BAMs_horseref/${name}_markdup_sorted_mtdna_horseref.bam --java-mem-size=200G 2>/shared5/Alex/Mitochondrial_project/BAMs_horseref/log_files/${name}_qualimap.log &
+done
+```
+
+To access OneDrive files on computer:
+`ll /drives/C/Users/asus/OneDrive\ -\ University\ of\ Glasgow/UNIVERSITY/5th\ YEAR/Honours\ project/Files/`
+
+
+## 02/01/2023
+I create consensus FASTAs but I get many undetermined bases so I rerun ANGSD but with a minimum depth threshold of 100x
+
+
+Tried reruning Y-chromosome FASTAs but minimum depth set at 30x:
+```bash
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
+  name=$(echo ${line} | awk '{print $1}');
+  number=$(echo ${line} | awk '{print $(NF-1)}');
+  maxnumber=$(echo ${line} | awk '{print $(NF)}');
+ angsd -i /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam -minMapQ 30 -minQ 20 -setMinDepth 30 -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta -out /shared5/Alex/Y-chromosome_project/FASTAs/${name}_30x_Y &
+done
+```
+
+I rerun the Y-chromosome FASTAs but with 30x minimum depth and 250x max:
+```bash
+#consensus fasta
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
+  name=$(echo ${line} | awk '{print $1}');
+  angsd -i /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam -minMapQ 30 -minQ 20 -setMinDepth 30 -setMaxDepth 250 -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta -out /shared5/Alex/Y-chromosome_project/FASTAs/${name}_30x_Y &
+done
+
+#change headers
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
+  name=$(echo $line | awk '{print $1}');
+  breed=$(echo $line | awk '{print $4}');
+  sed -i "s/>MH341179.1/>${name}_${breed}_MH341179.1/g" /shared5/Alex/Y-chromosome_project/FASTAs/${name}_30x_Y.fa
+done
+
+#concatente
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | awk '{print $1}' | while read name; do
+  cat /shared5/Alex/Y-chromosome_project/FASTAs/${name}_30x_Y.fa
+done >> Exmoor_horse_30x_Y.fa
+
+#add reference
+cat /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta Exmoor_horse_30x_Y.fa > tmp.fa && mv tmp.fa Exmoor_horse_30x_Y.fa
+
+#copy
+scp studentprojects@young.eng.gla.ac.uk:/shared5/Alex/Y-chromosome_project/FASTAs/Exmoor_horse_30x_Y.fa /drives/C/Users/asus/OneDrive\ -\ University\ of\ Glasgow/UNIVERSITY/5th\ YEAR/Honours\ project/Files/
+```
+
+
+
+## 16/01/23
+Restarted Y-chromosome pipeline today.
+Mapped to non-rep MSY assembly: (submitted 12:39h)
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $2}' | while read file ; do
+  location=$(echo ${file} | awk -F "/" '{$NF=""}1' OFS="/") ;
+  name=$(echo ${file} | awk -F "/" '{print $NF}' | sed 's/_1_val_1.fq.gz//');
+  bwa mem /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna ${location}${name}_1_val_1.fq.gz ${location}${name}_2_val_2.fq.gz > /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764.sam &
+done
+```
+
+I also redo the Run2, but with a new configure_strelka file that Anubhab has written.

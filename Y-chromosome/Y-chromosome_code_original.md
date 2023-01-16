@@ -22,13 +22,9 @@ Prior to starting any data processing or analyses I create a spreadsheet contain
 
 
 ## Downloading/obtaining a reference genome
-We need to have a reference genome to map the FASTQs on to.
-There are several different Y-chromosome assemblies.
+First, we need to have a reference genome to map the FASTQs on to.
 
-The first I will be using is a non-repetitive Male specific region from Wallner et al., 2017. It is 1.6 Mbp in total.
-To download it, I use NCBI and search in Genbank for its ID (PRJNA353919). Then I open the associated FTP directory and copy the link for the ".fna.gz" file. In the cluster, I use `wget -P /chosen_directory/ <copied_link>` to download the assembly directly into my directory. This reference file is called "GCA_002166905.2_LipY764_genomic.fna".
-
-I will also be mapping onto a number of specific Y-chromosome genes like
+I will be using a horse U-chromosome that was provide dto me by my post-doc.
 
 ## Creation of sample list
 First I check the pedigree of the indivudals that each sequence is from to see which are male. Then I make a list of all the male Exmoor, horse and Przewalski sequences and save this in a text file called *List_ychromosome.txt*. I add the file path for read 1 of each FASTQ as a correspoding second column
@@ -52,10 +48,11 @@ cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $2}' |
   name=$(echo ${file} | awk -F "/" '{print $NF}' | sed 's/_1_val_1.fq.gz//'); # variable of sample name
 
   # Mapping
-  bwa mem /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna \ # reference genome in fasta format
+  bwa mem /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta \ # reference genome in fasta format
   ${location}${name}_1_val_1.fq.gz \ # read 1
   ${location}${name}_2_val_2.fq.gz \ # read 2
-  > /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764.sam &  # output file location and name
+  2> shared5/Alex/Y-chromosome_project/BAMs/log_files/${name}.bwamem.log \ # creates a log file containing errors
+  > /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y.sam &  # output file location and name
 done
 ```
 ***Note on code formatting:*** *\"\\" at the end of a line means that the command continues in the following line of code. In other words, the five lines of code in the `bwa mem` command are usually written in one line but, in this case, it is more visual to see each argument on a different line*
@@ -233,4 +230,4 @@ I use Bioedit to view the sequences and align them.
 #### 9.2 Count haplotypes
 Count how many haplotypes there are by using a tree or DNAsp
 
-#### 9.3 Create NEXUS file
+#### 9.3 Create NEXUS file 

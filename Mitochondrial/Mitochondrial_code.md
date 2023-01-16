@@ -62,7 +62,7 @@ cat /shared5/Alex/Mitochondrial_project/Mitochondrial_list.txt | awk '{print $2}
   bwa mem /shared5/Alex/Donkey_ref/Donkey_mitogenome.fasta \ # reference genome in fasta format
   ${location}${name}_1_val_1.fq.gz \ # read 1
   ${location}${name}_2_val_2.fq.gz \ # read 2
-  2> ${location}${name}.bwamem.log \ # creates a log file containing errors
+  2> /shared5/Alex/Mitochondrial_project/BAMs/log_files/${name}.bwamem.log \ # creates a log file containing errors
   > /shared5/Alex/Mitochondrial_project/BAMs/${name}_mtdna.sam &  # output file location and name
 done
 ```
@@ -241,3 +241,35 @@ done >> horse_mtdna_DonkeyRef.fa
 cat /shared5/Alex/Donkey_ref/Donkey_mitogenome.fasta >> horse_mtdna_DonkeyRef.fa
 
 ```
+
+## 9. Preparing NEXUS file
+#### 9.1 Preparing (and aligning) sequences
+I use Bioedit to view the sequences and align them.
+Comments:
+- Przewalski mitogenomes are all uncertain; they are all "N"s
+- Exmoor sequence S49052 and Franches-Montagne sequence ERR978597 contain no information
+- Certain regions like th D-loop contain no information and are unusable
+
+I copy only donkey reference and Exmoor sequences in a new file called "Exmoor_mtdna_DonkeyRef.fa". I removed sequence S49052 from this file. Removed from position 16110 onwards because it is a hypervariable region and there were amny uncertain bases.
+
+
+
+#### 9.2 Determining haplotypes
+I use DNAsp to determine how many different haplotypes there are. I do this by inputting the created FASTA file with only the Exmoor sequences and then I press "Generate > Haplotype data file". This creates a NEXUS file which I then have to add the TRAITS matrix to.
+
+#### 9.3 Create NEXUS file
+I am going to create two NEXUS files depending on the TRAITS (i.e. population). First, I will create one based on the herd and the second on the maternal found of each sample. That way I can see how many haplotypes are found in each herd and maternal lineage.
+
+###### Herds
+There are 20 herds.
+
+
+###### Maternal lines
+I create a text file which has all the possible maternal lines and then sort them and count how many there are using:
+```bash
+awk '{print $1}' all_maternal_lines.txt | sort | uniq -c
+```
+There are 23 different female founders.
+
+## 10. Haplotype network
+I use PopART for this.

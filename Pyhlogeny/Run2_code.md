@@ -164,7 +164,7 @@ done
 2.	Then I created a Strelka script that uses the remaining horse and Przewalski genomes and loops over the different scaffold folders :
 
 ```bash
-#configure_strelka.sh content:
+#old and incorrect configure_strelka.sh content:
 for dir in /shared5/Alex/Run2/*/ ; do
     cd $dir
     mkdir -p Out # the "-p" makes the command only create a directory if it doesn't already exit
@@ -211,6 +211,56 @@ for dir in /shared5/Alex/Run2/*/ ; do
     --runDir .
     cd ../
     done
+
+#correct version:
+for dir in */
+do
+cd $dir
+mkdir Out
+OUT_DIR=$(echo `pwd`/Out)
+CB=$(echo *bed.gz)
+CURR_BED=$(echo `pwd`/$CB)
+
+configureStrelkaGermlineWorkflow.py \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1305962_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1305964_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1306526_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1527948_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1527950_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1527952_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1527958_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1527966_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1527969_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1527970_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1527972_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1545180_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1545181_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1545184_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1545185_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1545187_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1545188_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR1545190_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR2179545_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR2179547_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR2179548_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR2179550_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR2179554_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR2179555_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR2179556_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR2731056_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR2731060_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR863167_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR868003_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR978597_sorted_markdup.bam \
+--bam /shared5/Alex/Horses/Horses_remaining/BAMs/ERR978599_sorted_markdup.bam \
+--bam /shared5/Alex/Przewalski/BAMs/SRR12719745_markdup.bam \
+--bam /shared5/Alex/Przewalski/BAMs/SRR12719757_markdup.bam \
+--bam /shared5/Alex/Przewalski/BAMs/SRR12719758_markdup.bam \
+--referenceFasta /shared5/Alex/Donkey_ref/GCF_016077325.2_ASM1607732v2_genomic.fna \
+--callRegions $CURR_BED \
+--runDir $OUT_DIR
+cd ..
+done
 ```
 
 
@@ -225,6 +275,13 @@ bash configure_strelka.sh
 for dir in */ ; do
 ./${dir}runWorkflow.py -m local -j 2 &
 done
+
+#I rerun this but covering fewer chromosomes and more CPUs
+for dir in {227..238}; do
+  cd NC_12${dir}
+  ./runWorkflow.py -m local -j 8 &
+done
+
 ```
 * `-m`: *Run mode*
 * `-j`: *Number of jobs*. Default is the estimate total cores on this node for local mode.
