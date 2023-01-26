@@ -28,7 +28,9 @@ There are several different Y-chromosome assemblies.
 The first I will be using is a non-repetitive Male specific region from Wallner et al., 2017. It is 1.6 Mbp in total.
 To download it, I use NCBI and search in Genbank for its ID (PRJNA353919). Then I open the associated FTP directory and copy the link for the ".fna.gz" file. In the cluster, I use `wget -P /chosen_directory/ <copied_link>` to download the assembly directly into my directory. This reference file is called "GCA_002166905.2_LipY764_genomic.fna".
 
-I will also be mapping onto a number of specific Y-chromosome genes like
+I also want to map to a number of specific Y-chromosome genes, in order to avoid repetitive areas. So I read the list of genes they used in Felhel et al., 2019: AMELY, SRY, TSPY, USP9Y, UTY, ZFY. Check table (file:///C:/Users/asus/Downloads/03011table1.html) from Paria et al., 2011 to find Genbank IDs to download the genes. --> In the end, Barbara said that this was unecessary as there is little to no variation in horse Ychromosome genes.
+
+
 
 ## Creation of sample list
 First I check the pedigree of the indivudals that each sequence is from to see which are male. Then I make a list of all the male Exmoor, horse and Przewalski sequences and save this in a text file called *List_ychromosome.txt*. I add the file path for read 1 of each FASTQ as a correspoding second column
@@ -44,6 +46,10 @@ S21109_EDSW200015550-1a_HJFWVDSXY_L4    /shared5/Alex/Exmoor_sequencing_data/Sep
 ### 1. Mapping FASTQs
 **Important to note**: The FASTQs I am working with are already trimmed.
 
+Sidenote: Some papers (Wallner et al., 2017; Felkhel et al., 2019) on horse Y-chromosome use bwa aln but i think it's because they have many reptetitive regions, so I will continue using bwa mem.
+
+I map using `bwa mem` with the `-M` option that "Marks shorter split hits as secondary (for Picard compatibility)". It esentially marks uncertain reads as secondary.
+
 ```bash
 cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $2}' | while read file ; do
 
@@ -52,9 +58,10 @@ cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $2}' |
   name=$(echo ${file} | awk -F "/" '{print $NF}' | sed 's/_1_val_1.fq.gz//'); # variable of sample name
 
   # Mapping
-  bwa mem /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna \ # reference genome in fasta format
+  bwa mem -M /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna \ # reference genome in fasta format
   ${location}${name}_1_val_1.fq.gz \ # read 1
   ${location}${name}_2_val_2.fq.gz \ # read 2
+  2> /shared5/Alex/Y-chromosome_project/BAMs_LipY764/log_files/${name}.bwamem.log
   > /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764.sam &  # output file location and name
 done
 ```
@@ -65,70 +72,75 @@ done
 ## 2. Converting to BAM and sorting
 Now that the SAM files have been created, I convert them to BAM format so they take less space and sort them by reading name using `samtools view` and then `samtools sort`:
 
+I am using options based on Felkel et al. (2019).
+
 ```bash
 cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $1}' | while read name ; do
-  samtools view -q 30 -u /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y.sam | \ # "-q" Skip alignments with MAPQ
-  samtools sort -n -o /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted.bam & # this creates a log file containing standard errors
+  samtools view -h -b -F 4 -u /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764.sam | \ # "-q" Skip alignments with MAPQ
+  samtools sort -o /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted.bam & # this creates a log file containing standard errors
 done
 ```
 > `samtools view` options:
-* `-q`: *Minimal mapping quality*. Basic quality filter that skips alignments with a mapping quality smaller than the set value (in this case 30)
+* `-h`: *Include the header in the output*
+* `-b`: *Output in BAM format*
+* `-F`: *Exclusion flag*. In this case the flag is set at "4" so it will exclude unmapped reads.
 * `-u`: *Output uncompressed data*. Preferred when piping to another samtools command.
 
 > `samtools sort`options:
-* `-n`: *Sort by read names rather than by chromosomal coordinates.*. We are sorting by read name for later steps
 * `-o`: *Write the final sorted output to specified file name*
 
 
+## 3. Marking duplicates
+I use Picardtools MarkDuplicates as it removes interchromsomal duplicates and overall desribed as better:
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $1}' | while read name ; do
+  java -Xmx4g jar /shared5/Alex/picard-2.27.5/picard.jar MarkDuplicates  \
+    -I /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted.bam \ # input file
+    -O /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp.bam \ #output file
+    -M /shared5/Alex/Y-chromosome_project/BAMs_LipY764/log_files/${name}_markdup_metrics.txt \ # text file with marked_dup_metrics
+    --REMOVE_DUPLICATES true --ASSUME_SORT_ORDER coordinate --VALIDATION_STRINGENCY SILENT & \
+done
+```
 
-## 3. Merging BAM files
+## 4. Merging BAM files
 Since some of the sequences I have belong to the same individual, I have to merge the corresponding BAM files together.
 
 `samtools merge` can be used for this:
 ```bash
-samtools merge <output file> <input file1> <input file2>
+samtools merge E_23279_merged_LipY764_sorted_rmdp.bam E_23279_EKDN220034363-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp.bam E_23279_EKDN220034363-1A_H7VKMDSX5_L3_LipY764_sorted_rmdp.bam;
+
+samtools merge E_23416_merged_LipY764_sorted_rmdp.bam E_23416_EKDN220034368-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp.bam E_23416_EKDN220034368-1A_H7VKMDSX5_L1_LipY764_sorted_rmdp.bam E_23416_EKDN220034368-1A_H7VL2DSX5_L2_LipY764_sorted_rmdp.bam;
+
+samtools merge E_320005_merged_LipY764_sorted_rmdp.bam E_320005_EKDN220034373-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp.bam E_320005_EKDN220034373-1A_H7VKMDSX5_L1_LipY764_sorted_rmdp.bam E_320005_EKDN220034373-1A_H7VL2DSX5_L4_LipY764_sorted_rmdp.bam;
+
+samtools merge E_32023_merged_LipY764_sorted_rmdp.bam E_32023_EKDN220034372-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp.bam E_32023_EKDN220034372-1A_H7VKMDSX5_L1_LipY764_sorted_rmdp.bam
 ```
-n I create a new list (List_Y-chromosome_merged.txt) with the updated IDs of the sequences. E.g. The merged file IDs have now become "s479021_merged" instead of "s2479021_EDSW210003783-1a_H3WNKDSX2_L4"
+And I create a new list (List_Y-chromosome_merged.txt) with the updated IDs of the sequences. E.g. The merged file IDs have now become "s479021_merged" instead of "s2479021_EDSW210003783-1a_H3WNKDSX2_L4"
 
-
-## 4. Marking duplicates
-I use `samtools markdup`, but prior to this, the files need to be processed with `samtools fixmate` and then sorted by coordinate using `samtools sort`:
+## 5. Quality filtering
+I use quality filters form Felkhel et al. (2019):
 
 ```bash
 cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name ; do
-  samtools fixmate -m /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted.bam - | \
-  samtools sort - | \
-  samtools markdup - /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam &
+  samtools view -h -b -F 4 -q 20 /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp.bam -o /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam &
 done
 ```
-> `samtools fixmate` options:
-* `-m`: *Adds a mate score tags* These are used by markdup to select the best reads to keep.
-* `-`: pipe output
 
-> `samtools sort` options:
-* *Note: you don't need to specify sorting by coordinate because that is the default option*
-*`-`: pipe output
-
-> `samtools markdup` options:
-* `-`: pipe input
-
-
-## 5. Indexing
+## 6. Indexing
 Now that the BAMs has been created, sorted and duplicates have been marked, they need to be indexed for future analyses.
 
 ```bash
 cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name ; do
-  samtools index /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam &
+  samtools index /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam &
 done
 ```
 
-## 6. Validating BAM files
+## 7. Validating BAM files
 It is good practice to make sure that the BAMs have been created correctly.
 
 There are two tools to check the validity of a BAM file: `samtools quickcheck` and `ValidateSamFile` from Picardtools. Samtools is very quick but not that thorough whereas Picard will report all errors encountered when checking a BAM file. As described by GATK, "*ValidateSamFile is most useful for troubleshooting errors encountered with other tools that may be caused by improper formatting, faulty alignments, incorrect flag values, etc.*
 
 Generally I use `ValidateSamFile` on the final BAMs I have created and `samtools quickcheck` on the files that I have created in previous steps (i.e. SAMs or the sorted BAMs).
-
 
 ```bash
 #Samtools quickecheck:
@@ -140,97 +152,64 @@ java -jar /shared5/Alex/picard-2.27.5/picard.jar ValidateSamFile \
   -O <output.textfile> \ # output textfile containing any errors
   -R <reference_sequence> \ # optional
   --MODE SUMMARY # outputs a summary table listing the numbers of all 'errors' and 'warnings'.
-
-  /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta
 ```
 
-
-## 7. Calculating BAM coverage
+## 8. Calculating BAM coverage
 I use `qualimap bamqc` to calculate the coverage of the BAM files [(qualimap bamqc manual)](http://qualimap.conesalab.org/doc_html/analysis.html#bamqc).
 
 *Important to note:* There is no need to specify an output as qualimap creates an output folder containing the stats results.
 
 ```bash
 cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name ; do
-  qualimap bamqc -bam /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam \
-  --java-mem-size=200G 2>/shared5/Alex/Y-chromosome_project/BAMs/log_files/${name}_qualimap.log & # Sets desired memory size
+  qualimap bamqc -bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam --java-mem-size=200G 2>/shared5/Alex/Y-chromosome_project/BAMs_LipY764/log_files/${name}_qualimap.log & # Sets desired memory size
 done
 ```
 
-
-## 8. Creating consensus FASTA files
-In order to call variants with VCFtools, we first need to create consensus FASTA files using `angsd`:
-
-#### 8.1 Creating sample list with coverage data
-ANGSD needs the minimum and maxium coverage values for each BAM, so we will create a new sample list that contains the names of each sample and also the minimum and maxium coverage values for each BAM.
+## 9.1 Prelimnary consensus FASTA creation
 
 ```bash
+#creating depth list
 cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
-  coverage=$(cat /shared5/Alex/Y-chromosome_project/BAMs/${name}*stats/genome_results.txt | grep "mean coverageData"  | awk '{print $4}' | sed 's/X//' | sed 's/,//' | cut -d "." -f 1);
+  coverage=$(cat /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}*stats/genome_results.txt | grep "mean coverageData"  | awk '{print $4}' | sed 's/X//' | sed 's/,//' | cut -d "." -f 1);
   paste <(echo ${name}) <(echo ${coverage}) <(echo "${coverage} * 2" | bc);
-done > /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt
-```
+done > /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt
 
-
-#### 8.2 Consensus FASTA command
-
-```bash
-cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
-
+#consensus FASTAs
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt | while read line; do
   #Defining variables:
   name=$(echo ${line} | awk '{print $1}');
   number=$(echo ${line} | awk '{print $(NF-1)}');
   maxnumber=$(echo ${line} | awk '{print $(NF)}');
-
   #consensus FASTA
-  angsd -i /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam -minMapQ 30 -minQ 20 -setMinDepth ${number} -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta -out /shared5/Alex/Y-chromosome_project/FASTAs/${name}_Y &
+  angsd -i /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam -minMapQ 30 -minQ 20 -setMinDepth ${number} -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna -out /shared5/Alex/Y-chromosome_project/FASTAs_LipY764/${name}_LipY764 &
 done
-```
 
-#### 8.3 Changing headers
-We add the sequence ID to each FASTA header:
-```bash
-#first uncompress the FASTAs
+#first we unzip the compressed FASTAs
 gunzip *fa.gz
 
-#add corresponding breed to chromosome_ID_depth_list.txt
-paste <(cat Y-chromosome_ID_depth_list.txt) <(echo "Exmoor
-Exmoor
-...") > tmp.txt && mv tmp.txt Y-chromosome_ID_depth_list.txt
-
-#change header
-cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
-  name=$(echo $line | awk '{print $1}');
-  breed=$(echo $line | awk '{print $4}');
-  sed -i "s/>MH341179.1/>${name}_${breed}_MH341179.1/g" /shared5/Alex/Y-chromosome_project/FASTAs/${name}_Y.fa
+#change headers
+cat /shared5/Alex/Mitochondrial_project/Mitochondrial_ID_depth_list_horseref.txt | awk '{print $1}' | while read name; do
+  sed -i "s/>NC_001640.1/>${name}_>NC_001640.1/g" /shared5/Alex/Mitochondrial_project/FASTAs_horseref/${name}_mtdna_horseref.fa
 done
 ```
 
-#### 8.4 Concatenating FASTAs
-Then we compile all the FASTAs in one file and add the reference mitogenome as well:
+
+
+## 9. Variant calling
+My original pipeline used ANGSD to call consensus FASTAs but most papers use GATK Haplotype caller.
+Felkhel et al., (2019) does:
 ```bash
-#concatinating FASTAs
-cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | awk '{print $1}' | while read name; do
-  cat /shared5/Alex/Y-chromosome_project/FASTAs/${name}_Y.fa
-done >> Exmoor_horse_Y.fa
-
-
-## adding reference sequence
-cat /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta Exmoor_horse_Y.fa > tmp.fa && mv tmp.fa Exmoor_horse_Y.fa
+java -jar GenomeAnalysisTK.jar -T HaplotypeCaller –I sample_mapped_sort_rmdup_MQ20.bam
+-R Lip_Y_Assembly_reapr.fa > sample.g.vcf
+java -jar GenomeAnalysisTK.jar -T CombineGVCFs -V sample1.g.vcf -V sample2.g.vcf
+–V sampleX.g.vcf -o cohort.g.vcf
 ```
+In Wallner et al. (2017) they use vcftools for variant calling:
+"    Variants for were called with Samtools.
 
-#### 8.5 Copy concatinated FASTA file to local disk
-```bash
-scp studentprojects@young.eng.gla.ac.uk:/shared5/Alex/Y-chromosome_project/FASTAs/Exmoor_horse_Y.fa ./Desktop
-```
+    samtools-0.1.18/bcf-tools
+
+    samtools-0.1.18/samtools view -h filename_trimmed_mapped_sorted_nodupSAMTminusS_MQ20.bam | samtools view -bS - | samtools mpileup -A -u -f reference.fa - | bcftools view -vcg - | vcfutils.pl varFilter -d 2 -D 200 > filename_trimmed_only_mapped_sorted_nodupSAMTminusS_MQ20.vcf"
 
 
-
-## 9. Preparing NEXUS file
-#### 9.1 Aligning sequences
-I use Bioedit to view the sequences and align them.
-
-#### 9.2 Count haplotypes
-Count how many haplotypes there are by using a tree or DNAsp
-
-#### 9.3 Create NEXUS file
+Whilst the Canid Y-chromosome paper did: "We next recalled Y-chromosome genotypes in the male samples using the GATK haplotype caller using the EMIT_ALL_SITES flag. Following methods previously used for identifying repetitive sequence unsuitable for read mapping in primate Y-chromosomes, we used mapping and depth statistics from the VCF info field to identify callable regions on the canine Y-chromosome (Fig. 1) [26, 27]. Once a callable region was identified, we applied site level filtering to the remaining sequence: dropping maximum likelihood heterozygotes, missing sites, and positions with an MQ0/raw depth ratio > 0.10. A second depth filter was then applied to remove positions with extreme sequencing depths (median depth ± 3 M.A.D.). We also removed positions that were within 5 bp of GATK called indels."

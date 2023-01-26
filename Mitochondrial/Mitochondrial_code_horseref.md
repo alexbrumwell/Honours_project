@@ -159,7 +159,7 @@ done > /shared5/Alex/Mitochondrial_project/Mitochondrial_ID_depth_list_horseref.
 ```
 
 #### 8.2 Consensus FASTA command
-
+IMPORTANT: I THINK I RERAN THIS BUT WITH MINIMUM DEPTH SET AT 100x
 ```bash
 cat /shared5/Alex/Mitochondrial_project/Mitochondrial_ID_depth_list_horseref.txt | while read line; do
 
@@ -201,8 +201,32 @@ cat /shared5/Alex/Mitochondrial_project/horse_mtdna_reference/horse_mtdna_refere
 
 ## 9. Preparing NEXUS file
 #### 9.1 Preparing (and aligning) sequences
-I use Bioedit to view the sequences and align them.
-Comments:
-- Sequence "S49052_EDSW200015551" contains no info so I remove it from the file
+I use Bioedit to view the sequences and check them.
 
-I get almost the same results as when mapped to the donkey reference. To do: compare the two haplotype networks.
+
+
+
+#### 9.2 Determining haplotypes
+I use DNAsp to determine how many different haplotypes there are. I do this by inputting the created FASTA file with only the Exmoor sequences and then I press "Generate > Haplotype data file". This creates a NEXUS file which I then have to add the TRAITS matrix to.
+
+I then renumber the haplotypes using the numbering by Debbie.
+
+
+
+#### 9.3 Create NEXUS file
+I am going to create two NEXUS files depending on the TRAITS (i.e. population). First, I will create one based on the herd and the second on the maternal found of each sample. That way I can see how many haplotypes are found in each herd and maternal lineage.
+
+I use EXCEL to add the traits part.
+###### Herds
+There are 20 herds.
+
+
+###### Maternal lines
+I create a text file which has all the possible maternal lines and then sort them and count how many there are using:
+```bash
+awk '{print $1}' all_maternal_lines.txt | sort | uniq -c
+```
+There are 23 different female founders.
+
+## 10. Haplotype network
+I use PopART for this.

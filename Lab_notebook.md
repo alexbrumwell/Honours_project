@@ -574,9 +574,6 @@ cat /shared5/Alex/Mitochondrial_project/List_mitochondrial_merged.txt | grep "Ex
 done
 ```
 
-To access OneDrive files on computer:
-`ll /drives/C/Users/asus/OneDrive\ -\ University\ of\ Glasgow/UNIVERSITY/5th\ YEAR/Honours\ project/Files/`
-
 
 ## 02/01/2023
 I create consensus FASTAs but I get many undetermined bases so I rerun ANGSD but with a minimum depth threshold of 100x
@@ -632,4 +629,162 @@ cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $2}' |
 done
 ```
 
-I also redo the Run2, but with a new configure_strelka file that Anubhab has written.
+## 18/01/23
+I map the Sep_2022 Exmoor individuals to the EquCab3 reference: (submitted 12:15)
+```bash
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $2}' | while read file ; do
+  location=$(echo ${file} | awk -F "/" '{$NF=""}1' OFS="/") ;
+  name=$(echo ${file} | awk -F "/" '{print $NF}' | sed 's/_1_val_1.fq.gz//');
+  bwa mem /shared5/Alex/Inbreeding_project/horse_WG_reference/GCF_002863925.1_EquCab3.0_genomic.fna ${location}${name}_1_val_1.fq.gz ${location}${name}_2_val_2.fq.gz 2> /shared5/Alex/Inbreeding_project/BAMs/log_files/${name}.bwamem.log > /shared5/Alex/Inbreeding_project/BAMs/${name}_horseref.sam &
+done
+```
+
+Remapped to non-rep MSY assembly but adding `-M` option: (submitted 12:50h)
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $2}' | while read file ; do
+  location=$(echo ${file} | awk -F "/" '{$NF=""}1' OFS="/") ;
+  name=$(echo ${file} | awk -F "/" '{print $NF}' | sed 's/_1_val_1.fq.gz//');
+  bwa mem -M /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna ${location}${name}_1_val_1.fq.gz ${location}${name}_2_val_2.fq.gz 2> /shared5/Alex/Y-chromosome_project/BAMs_LipY764/log_files/${name}.bwamem.log > /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764.sam &
+done
+```
+
+
+# 19/01/23
+Do pipeline to map 4 Exmoor individuals to the WG donkey reference for Run2 (E_102004, E_107013,E_21084, E_21149):
+```bash
+# Mapping
+cat /shared5/Alex/Exmoor/List_Exmoor.txt | awk '{print $2}' | while read file ; do
+  location=$(echo ${file} | awk -F "/" '{$NF=""}1' OFS="/") ;
+  name=$(echo ${file} | awk -F "/" '{print $NF}' | sed 's/_1_val_1.fq.gz//');
+  bwa mem /shared5/Alex/Donkey_ref/GCF_016077325.2_ASM1607732v2_genomic.fna.gz ${location}${name}_1_val_1.fq.gz ${location}${name}_2_val_2.fq.gz 2> /shared5/Alex/Exmoor/BAMs/log_files/${name}.bwamem.log > /shared5/Alex/Exmoor/BAMs/${name}_DonkeyRef.sam &
+done
+
+# Sorting
+cat /shared5/Alex/Exmoor/List_Exmoor.txt | awk '{print $1}' | while read name ; do
+  samtools view -q 30 -u /shared5/Alex/Exmoor/BAMs/${name}_DonkeyRef.sam | samtools sort -n -o /shared5/Alex/Exmoor/BAMs/${name}_sorted_DonkeyRef.bam &
+done
+
+# Markdup
+cat /shared5/Alex/Exmoor/List_Exmoor.txt | awk '{print $1}' | while read name ; do
+  samtools fixmate -m /shared5/Alex/Exmoor/BAMs/${name}_sorted_DonkeyRef.bam - | samtools sort - | samtools markdup - /shared5/Alex/Exmoor/BAMs/${name}_sorted_markdup_DonkeyRef.bam &
+done
+
+# Indexing
+samtools index *markdup.bam
+
+# Qualimap
+cat /shared5/Alex/Exmoor/List_Exmoor.txt | awk '{print $1}' | while read name; do
+  qualimap bamqc -bam /shared5/Alex/Exmoor/BAMs/${name}_sorted_markdup_DonkeyRef.bam --java-mem-size=200G 2>/shared5/Alex/Exmoor/BAMs/log_files/${name}_qualimap.log &
+done
+```
+
+
+## 20/01/23
+Continued pipieline of Y chromosome pipeline: (submitted 12:56h)
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $1}' | while read name ; do
+  samtools view -h -b -F 4 -u /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764.sam |   samtools sort -o /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted.bam &
+done
+```
+
+
+
+# 23/01/23
+Continued pipieline of Y chromosome pipeline. Removed duplicates: (submitted 13:31h)
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $1}' | while read name ; do
+  java -jar /shared5/Alex/picard-2.27.5/picard.jar MarkDuplicates -I /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted.bam -O /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp.bam -M /shared5/Alex/Y-chromosome_project/BAMs_LipY764/log_files/${name}_markdup_metrics.txt --REMOVE_DUPLICATES true --ASSUME_SORT_ORDER coordinate --VALIDATION_STRINGENCY SILENT &
+done
+```
+
+Continued pipeline of Inbreeding 2022 Exmoor genomes. Sorting (submitted 14:05h):
+```bash
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
+  samtools view -h -b -F 4 -q 30 -u /shared5/Alex/Inbreeding_project/BAMs/${name}_horseref.sam |  samtools sort -o /shared5/Alex/Inbreeding_project/BAMs/${name}_sorted_horseref.bam &
+done
+```
+
+# 24/01/23
+Whilst running remove duplicates of the Ychromosome pipeline, some of the files failed because they ran out of memory. Error states:
+`# There is insufficient memory for the Java Runtime Environment to continue.
+# Native memory allocation (mmap) failed to map 8048869376 bytes for committing reserved memory.`
+
+I will rerun the code on all the samples but this time reducing the allocated memory using `-Xmx4g` which sets memory to 4 Gb: (submitted 12:31h)
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $1}' | while read name ; do
+  java -Xmx4g -jar /shared5/Alex/picard-2.27.5/picard.jar MarkDuplicates -I /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted.bam -O /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp.bam -M /shared5/Alex/Y-chromosome_project/BAMs_LipY764/log_files/${name}_markdup_metrics.txt --REMOVE_DUPLICATES true --ASSUME_SORT_ORDER coordinate --VALIDATION_STRINGENCY SILENT --MAX_FILE_HANDLES_FOR_READ_ENDS_MAP 1000 &
+done
+```
+
+Then I use samtools merge for Ychromsome pipeline. There are 4 indivudals that need to be merged:
+```bash
+samtools merge E_23279_merged_LipY764_sorted_rmdp.bam E_23279_EKDN220034363-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp.bam E_23279_EKDN220034363-1A_H7VKMDSX5_L3_LipY764_sorted_rmdp.bam;
+
+samtools merge E_23416_merged_LipY764_sorted_rmdp.bam E_23416_EKDN220034368-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp.bam E_23416_EKDN220034368-1A_H7VKMDSX5_L1_LipY764_sorted_rmdp.bam E_23416_EKDN220034368-1A_H7VL2DSX5_L2_LipY764_sorted_rmdp.bam;
+
+samtools merge E_320005_merged_LipY764_sorted_rmdp.bam E_320005_EKDN220034373-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp.bam E_320005_EKDN220034373-1A_H7VKMDSX5_L1_LipY764_sorted_rmdp.bam E_320005_EKDN220034373-1A_H7VL2DSX5_L4_LipY764_sorted_rmdp.bam;
+
+samtools merge E_32023_merged_LipY764_sorted_rmdp.bam E_32023_EKDN220034372-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp.bam E_32023_EKDN220034372-1A_H7VKMDSX5_L1_LipY764_sorted_rmdp.bam
+```
+Then I submit quality filtering for Ychromosome pipeline: (submitted 15:39h)
+```bash
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name ; do
+  samtools view -h -b -F 4 -q 20 /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp.bam -o /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam &
+done
+```
+
+Continued pipeline of Inbreeding 2022 Exmoor genomes. Markdup (submitted 12:45h):
+```bash
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
+  java -Xmx4g -jar /shared5/Alex/picard-2.27.5/picard.jar MarkDuplicates -I /shared5/Alex/Inbreeding_project/BAMs/${name}_sorted_horseref.bam -O /shared5/Alex/Inbreeding_project/BAMs/${name}_rmdp_sorted_horseref.bam -M /shared5/Alex/Inbreeding_project/BAMs/log_files/${name}_markdup_metrics.txt --REMOVE_DUPLICATES true --ASSUME_SORT_ORDER coordinate --VALIDATION_STRINGENCY SILENT --MAX_FILE_HANDLES_FOR_READ_ENDS_MAP 1000 &
+done
+```
+I try running ValidateSamFile to see what the issue is:
+```bash
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
+  java -jar /shared5/Alex/picard-2.27.5/picard.jar ValidateSamFile -I /shared5/Alex/Inbreeding_project/BAMs/${name}*sam -O  /shared5/Alex/Inbreeding_project/BAMs/${name}_sam_horseref_validate.txt --MODE SUMMARY -R /shared5/Alex/Inbreeding_project/horse_WG_reference/GCF_002863925.1_EquCab3.0_genomic.fna &
+done
+```
+
+
+I try rerunning it for just a single file.
+java -Xmx4g -jar /shared5/Alex/picard-2.27.5/picard.jar MarkDuplicates -I /shared5/Alex/Inbreeding_project/BAMs/E_900588_EKDN220034362-1A_H7VKVDSX5_L2_sorted_horseref.bam -O /shared5/Alex/Inbreeding_project/BAMs/E_900588_EKDN220034362-1A_H7VKVDSX5_L2_rmdp_sorted_horseref.bam -M /shared5/Alex/Inbreeding_project/BAMs/log_files/E_900588_EKDN220034362-1A_H7VKVDSX5_L2_markdup_metrics.txt --REMOVE_DUPLICATES true --ASSUME_SORT_ORDER coordinate --VALIDATION_STRINGENCY SILENT --MAX_FILE_HANDLES_FOR_READ_ENDS_MAP 1000
+
+Still get error for the Inbreeding genomes.
+
+
+
+# 25/01/23
+Continue pipeline for Ychromosome. Indexing and Qualimap. (submitted 12:30h):
+```bash
+#Indexing
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name ; do
+  samtools index /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam &
+done
+
+#Qualimap
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name ; do
+  qualimap bamqc -bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam --java-mem-size=200G 2>/shared5/Alex/Y-chromosome_project/BAMs_LipY764/log_files/${name}_qualimap.log &
+done
+
+#creating depth list
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
+  coverage=$(cat /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}*stats/genome_results.txt | grep "mean coverageData"  | awk '{print $4}' | sed 's/X//' | sed 's/,//' | cut -d "." -f 1);
+  paste <(echo ${name}) <(echo ${coverage}) <(echo "${coverage} * 2" | bc);
+done > /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt
+
+#consensus FASTAs
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt | while read line; do
+  name=$(echo ${line} | awk '{print $1}');
+  number=$(echo ${line} | awk '{print $(NF-1)}');
+  maxnumber=$(echo ${line} | awk '{print $(NF)}');
+  angsd -i /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam -minMapQ 30 -minQ 20 -setMinDepth ${number} -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna -out /shared5/Alex/Y-chromosome_project/FASTAs_LipY764/${name}_LipY764 &
+done
+```
+I rerun the consensus FASTA but at 30x beacause I was getting no bases 
+
+
+
+
+To access OneDrive files on computer:
+`ll /drives/C/Users/asus/OneDrive\ -\ University\ of\ Glasgow/UNIVERSITY/5th\ YEAR/Honours\ project/Files/`

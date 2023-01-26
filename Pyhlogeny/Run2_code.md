@@ -16,6 +16,8 @@ Run2 is the second part of the horse phylogeny sideproject. Run2 utilized the re
 #### Remaining horse sequences (31/10/22)
 There are a remaining 31 horse sequences that were not used in Run1 and will be used for Run2. These remaining sequences also need to be processed.
 
+I also do this pipeline for four additional Exmoor genomes (E_102004, E_107013,E_21084, E_21149)
+
 **0. Obtaining FASTQs**
 1.	I review the metadata spreadsheet from the student and select the sequences that I haven't used in Run1 and compile these sequences into the spreadsheet for this project called Run2. I now have a total of 31 horse sequnces from various horse breeds.
 
@@ -78,7 +80,7 @@ done
 **5. Indexing**
 ```bash
 cat /shared5/Alex/Horses/Horses_remaining/remaining_horse_ID_list.txt | while read name; do
-  /shared5/Alex/Horses/Horses_remaining/BAMs/${name}_sorted_markdup.bam &
+  samtools index /shared5/Alex/Horses/Horses_remaining/BAMs/${name}_sorted_markdup.bam &
   done
 ```
 
@@ -273,20 +275,24 @@ bash configure_strelka.sh
 4.	This created python scripts for each scaffold called “runWorkflow.py”, which I then executed:
 ```bash
 for dir in */ ; do
-./${dir}runWorkflow.py -m local -j 2 &
+  cd ${dir}/Out;
+  ./runWorkflow.py -m local -j 2 &
+  cd ../
 done
 
-#I rerun this but covering fewer chromosomes and more CPUs
-for dir in {227..238}; do
-  cd NC_12${dir}
-  ./runWorkflow.py -m local -j 8 &
-done
+
 
 ```
 * `-m`: *Run mode*
 * `-j`: *Number of jobs*. Default is the estimate total cores on this node for local mode.
 
+## Adding 4 more Exmoors to Run2
+I map 4 more Exmoor individuals (E_102004, E_107013, E_21084, E_21149) to the doneky reference.
 
-
-## VCF filtering (31/10/22)
-I HAVE NOT REACHED THIS STAGE YET
+```bash
+cat /shared5/Alex/Exmoor/List_Exmoor.txt | awk '{print $2}' | while read file ; do
+  location=$(echo ${file} | awk -F "/" '{$NF=""}1' OFS="/") ;
+  name=$(echo ${file} | awk -F "/" '{print $NF}' | sed 's/_1_val_1.fq.gz//');
+  bwa mem /shared5/Alex/Donkey_ref/GCF_016077325.2_ASM1607732v2_genomic.fna.gz ${location}${name}_1_val_1.fq.gz ${location}${name}_2_val_2.fq.gz 2> /shared5/Alex/Exmoor/BAMs/log_files/${name}.bwamem.log > /shared5/Alex/Exmoor/BAMs/${name}_DonkeyRef.sam &
+done
+```
