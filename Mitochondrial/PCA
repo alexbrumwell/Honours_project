@@ -1,0 +1,25 @@
+#!/bin/bash
+PCA of mitochondrial sequences
+
+list=$(cat /shared5/Alex/Mitochondrial_project/List_mitochondrial_merged.txt | awk '{print $1}')
+angsd -bam ${list} -ref ${ref}
+-GL 2 \
+-doMajorMinor 1 \
+-SNP_pval 1e-6 \
+-doMaf 2 \
+-minMaf 0.004 \
+-doGlf 2 \
+-uniqueOnly 1 \
+-remove_bads 1 \
+-only_proper_pairs 1 \
+-trim 0 \
+-C 50 \
+-baq 1 \
+-skipTriallelic 1 \
+-minMapQ 30 \
+-out ${outdir}/Bonobo_${outname}
+
+
+/apps/PYTHON/2.7.14/AVX0/GCC/bin/python /apps/PCANGSD/20180209/pcangsd.py -beagle ${outdir}/Bonobo_${outname}.beagle.gz \
+-n 104 \
+-o ${outdir}/Bonobo_${outname}

@@ -165,8 +165,23 @@ cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{prin
 done
 ```
 
-## 9.1 Prelimnary consensus FASTA creation
+Then to see how much coverage each genome has:
+```bash
+#new ref
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
+  paste <(echo $name) <(grep  "mean coverageData" /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}*stats/*txt) <(grep  "number of reads" /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}*stats/*txt)
+done
 
+#old ref
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
+  paste <(echo $name) <(grep  "mean coverageData" /shared5/Alex/Y-chromosome_project/BAMs/${name}*stats/*txt) <(grep  "number of reads" /shared5/Alex/Y-chromosome_project/BAMs/${name}*stats/*txt)
+done
+```
+
+
+
+#### 9.0.1 Prelimnary consensus FASTA creation
+Barbara says to try running it with the depth threshold set at 5x
 ```bash
 #creating depth list
 cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
@@ -176,36 +191,196 @@ done > /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt
 
 #consensus FASTAs
 cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt | while read line; do
-  #Defining variables:
   name=$(echo ${line} | awk '{print $1}');
-  number=$(echo ${line} | awk '{print $(NF-1)}');
-  maxnumber=$(echo ${line} | awk '{print $(NF)}');
-  #consensus FASTA
-  angsd -i /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam -minMapQ 30 -minQ 20 -setMinDepth ${number} -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna -out /shared5/Alex/Y-chromosome_project/FASTAs_LipY764/${name}_LipY764 &
+  maxnumber=$(echo ${line} | awk '{print $(NF-1)}');
+  angsd -i /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam -minMapQ 30 -minQ 20 -setMinDepth 5 -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna -out /shared5/Alex/Y-chromosome_project/FASTAs_LipY764/${name}_5x_LipY764_Y &
 done
 
 #first we unzip the compressed FASTAs
 gunzip *fa.gz
 
-#change headers
-cat /shared5/Alex/Mitochondrial_project/Mitochondrial_ID_depth_list_horseref.txt | awk '{print $1}' | while read name; do
-  sed -i "s/>NC_001640.1/>${name}_>NC_001640.1/g" /shared5/Alex/Mitochondrial_project/FASTAs_horseref/${name}_mtdna_horseref.fa
+#because there are many scaffolds, I remove the headings of the scaffolds
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | awk '{print $1}' | while read name; do
+   sed -i '/>/d' /shared5/Alex/Y-chromosome_project/FASTAs_LipY764/${name}_5x_LipY764_Y.fa
 done
+
+#change headers
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
+  name=$(echo $line | awk '{print $1}');
+  breed=$(echo $line | awk '{print $NF}');
+  echo ">${name}_${breed}_LipY764" | cat - /shared5/Alex/Y-chromosome_project/FASTAs_LipY764/${name}_5x_LipY764_Y.fa > tmp.fa && mv tmp.fa /shared5/Alex/Y-chromosome_project/FASTAs_LipY764/${name}_5x_LipY764_Y.fa
+done
+```
+
+#### 9.0.3 Concatenating FASTAs
+Then we compile all the FASTAs in one file and add the reference mitogenome as well:
+```bash
+#concatinating FASTAs
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | awk '{print $1}' | while read name; do
+  cat /shared5/Alex/Y-chromosome_project/FASTAs_LipY764/${name}_5x_LipY764_Y.fa
+done >> Exmoor_horse_5x_horseref_NEW_Y.fa
+
+
+## adding reference sequence
+cat /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna Exmoor_horse_5x_horseref_NEW_Y.fa > tmp.fa && mv tmp.fa Exmoor_horse_5x_horseref_NEW_Y.fa
+```
+
+#### 9.0.4 Copy concatinated FASTA file to local disk
+```bash
+scp studentprojects@young.eng.gla.ac.uk:/shared5/Alex/Y-chromosome_project/FASTAs/Exmoor_horse_5x_horseref_NEW_Y.fa ./Desktop
 ```
 
 
 
-## 9. Variant calling
+
+## 9. Variant calling with Bcftools
+
+#Anubhabs pipeline:
+source activate popgen
+bcftools mpileup -f REF BAM1 BAM2 BAM3  > name.pileup
+bcftools call -c -O v --ploidy-file ploidy.txt -o name.vcf name.pileup
+#ploIDY.TXT contains chromosomeY 1 ENDPOS M 1
+
+```bash
+#To compile list of BAM files:
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt | cut -f 1 | while read name; do
+  echo "/shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam ";
+done > tmp.txt
+echo $(cat tmp.txt)
+
+#bcftools mpileup:
+bcftools mpileup -f /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/MH341179_Ychromosome.fasta /shared5/Alex/Y-chromosome_project/BAMs/E_102004_EKDN220034353-1A_H5GL5DSX5_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_107013_EKDN220034352-1A_H5GL5DSX5_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_21084_EKDN220034367-1A_H5J5MDSX5_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_23279_merged_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_23416_merged_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_320005_merged_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_32023_merged_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_49031_EKDN220034370-1A_H5J5MDSX5_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_519005_EKDN220034364-1A_H5J5MDSX5_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/s2010_EDSW210003772-1a_H3WNKDSX2_L3_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/s2012_EDSW210003766-1a_H3WHWDSX2_L4_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/s479013_EDSW210003775-1a_H3WNKDSX2_L3_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/s49097_EDSW210003769-1a_H3FTWDSX2_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/s49124_EDSW210003767-1a_H3WHWDSX2_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/S276023_EDSW200015547-1a2a_HJFWVDSXY_L3L4_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1527950_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1527947_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1305964_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545178_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545179_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR978597_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR978599_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR978603_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179545_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179555_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545180_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179549_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2731060_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545181_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179547_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545190_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR863167_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2731057_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1527967_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179546_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179552_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179548_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545184_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545183_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179544_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1527969_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1527970_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545188_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179556_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545189_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1735862_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545185_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545187_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545186_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/SRR12719743_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/SRR12719745_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/SRR12719757_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/SRR12719758_Y_sorted_markdup.bam > /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref.pileup
+
+#created ploidy file. I get the number from the third column by adding up the bases of the contigsfrom the fai index file
+chromosomeY 1 6462487 M 1 > ploidy.txt
+
+#bcftools call:
+bcftools call -c -O v --ploidy-file /shared5/Alex/Y-chromosome_project/variants_bcftools/ploidy.txt -o /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref.vcf /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref.pileup
+```
+
+I do same thing but with new reference too:
+```bash
+#bcftools mpileup
+bcftools mpileup -f /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_102004_EKDN220034353-1A_H5GL5DSX5_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_107013_EKDN220034352-1A_H5GL5DSX5_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_21084_EKDN220034367-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_23279_merged_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_23416_merged_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_320005_merged_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_32023_merged_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_49031_EKDN220034370-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_519005_EKDN220034364-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/s2010_EDSW210003772-1a_H3WNKDSX2_L3_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/s2012_EDSW210003766-1a_H3WHWDSX2_L4_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/s479013_EDSW210003775-1a_H3WNKDSX2_L3_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/s49097_EDSW210003769-1a_H3FTWDSX2_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/s49124_EDSW210003767-1a_H3WHWDSX2_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/S276023_EDSW200015547-1a2a_HJFWVDSXY_L3L4_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1527950_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1527947_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1305964_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545178_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545179_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR978597_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR978599_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR978603_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR2179545_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR2179555_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545180_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR2179549_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR2731060_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545181_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR2179547_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545190_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR863167_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR2731057_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1527967_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR2179546_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR2179552_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR2179548_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545184_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545183_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR2179544_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1527969_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1527970_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545188_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR2179556_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545189_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1735862_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545185_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545187_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/ERR1545186_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/SRR12719743_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/SRR12719745_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/SRR12719757_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/SRR12719758_LipY764_sorted_rmdp_MQ20.bam > /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_newref.pileup
+
+#bcftools call
+bcftools call -c -O v --ploidy-file /shared5/Alex/Y-chromosome_project/variants_bcftools/ploidy.txt -o /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_newref.vcf /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_newref.pileup
+```
+
+
+# 10. VCF filtering
+1.1 First step, quality filter and removing INDELS:
+```bash
+#oldref
+vcftools --vcf /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref.vcf --remove-indels --minQ 30 --minGQ 30 --out /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref_rmvIndels_minQ30_minGQ30 --recode
+
+#new reference
+vcftools --vcf /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_newref.vcf --remove-indels --minQ 30 --minGQ 30 --out /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30 --recode
+```
+
+1.2 To see how much missing information there is per individual:
+`vcftools –gzvcf data.vcf.gz –missing-indv –out data`
+
+2. Minimum allele count filter
+vcftools --vcf Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30.recode.vcf --min-alleles 2 --mac 3 --out Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3 --recode
+
+3. Exclude sites where >10% of data is missing
+vcftools --vcf Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3.recode.vcf --max-missing 0.9 --out Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3.recode.vcf
+
+#To see missingness of individuals:
+```bash vcftools --vcf Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3.recode.vcf --missing-indv --out Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3.recode.vcf
+```
+
+# 11. PLINK
+## 11.1 Download PLINK
+```bash
+conda create -n plink -c bioconda plink
+source activate plink
+```
+
+## 11.2 Create PLINK file
+Create plink file:
+```bash
+vcftools --vcf Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3.recode.vcf --plink --out Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3
+```
+
+## 11.3 PCA
+```bash
+plink --file Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3 --pca --out Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3
+```
+
+
+
+
+
+
+
+
+## Other attempts to call variants
+# Strelka
+Anubhabs suggests I use Strelka.
+
+I configure the configure strelka file first:
+```bash
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt | cut -f 1 | while read name; do
+  echo "--bam /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam \\";
+done
+
+#output of configure_strelka_old:
+configureStrelkaGermlineWorkflow.py \
+--bam /shared5/Alex/Y-chromosome_project/BAMs/E_102004_EKDN220034353-1A_H5GL5DSX5_L2_Y_sorted_markdup.bam \
+--bam /shared5/Alex/Y-chromosome_project/BAMs/E_107013_EKDN220034352-1A_H5GL5DSX5_L2_Y_sorted_markdup.bam \
+--bam /shared5/Alex/Y-chromosome_project/BAMs/s479013_EDSW210003775-1a_H3WNKDSX2_L3_Y_sorted_markdup.bam \
+(...)
+--referenceFasta /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/MH341179_Ychromosome.fasta \
+--runDir . \
+--ploidy /shared5/Alex/Y-chromosome_project/variants/head_ploidy.vcf.gz
+
+
+#for the ploidy file I created a header containing the sample IDs and other info and then:
+bgzip -c head_ploidy.vcf > head_ploidy.vcf.gz
+tabix -p vcf head_ploidy.vcf.gz
+
+#run configure script:
+bash configure_strelka.sh
+
+#run runWorkflow
+./runWorkflow.py -m local -j 10
+```
+
+Strelka won't run; getting error.
+
+
+# GATK Haplotypecaller
+```bash
+#CODE FOR GATK
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
+  gatk /home/opt/miniconda2/pkgs/gatk-3.8-5/bin/GenomeAnalysisTK -R /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna –I /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam -O /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764.vcf
+done
+
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
+  java -jar /shared3/Anubhab/software/GenomeAnalysisTK-3.8-1-0-gf15c1c3ef/GenomeAnalysisTK.jar -T HaplotypeCaller -R /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna –I /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam -O /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764.vcf
+done
+
+java -jar /shared3/Anubhab/software/GenomeAnalysisTK-3.8-1-0-gf15c1c3ef/GenomeAnalysisTK.jar -T CombineGVCFs -V sample1.g.vcf -V sample2.g.vcf
+–V sampleX.g.vcf -o cohort.g.vcf
+```
+
+
+
+
 My original pipeline used ANGSD to call consensus FASTAs but most papers use GATK Haplotype caller.
-Felkhel et al., (2019) does:
+Felkel et al., (2019) does:
 ```bash
 java -jar GenomeAnalysisTK.jar -T HaplotypeCaller –I sample_mapped_sort_rmdup_MQ20.bam
 -R Lip_Y_Assembly_reapr.fa > sample.g.vcf
 java -jar GenomeAnalysisTK.jar -T CombineGVCFs -V sample1.g.vcf -V sample2.g.vcf
 –V sampleX.g.vcf -o cohort.g.vcf
 ```
+
+
 In Wallner et al. (2017) they use vcftools for variant calling:
-"    Variants for were called with Samtools.
+"Variants for were called with Samtools.
 
     samtools-0.1.18/bcf-tools
 
@@ -213,3 +388,13 @@ In Wallner et al. (2017) they use vcftools for variant calling:
 
 
 Whilst the Canid Y-chromosome paper did: "We next recalled Y-chromosome genotypes in the male samples using the GATK haplotype caller using the EMIT_ALL_SITES flag. Following methods previously used for identifying repetitive sequence unsuitable for read mapping in primate Y-chromosomes, we used mapping and depth statistics from the VCF info field to identify callable regions on the canine Y-chromosome (Fig. 1) [26, 27]. Once a callable region was identified, we applied site level filtering to the remaining sequence: dropping maximum likelihood heterozygotes, missing sites, and positions with an MQ0/raw depth ratio > 0.10. A second depth filter was then applied to remove positions with extreme sequencing depths (median depth ± 3 M.A.D.). We also removed positions that were within 5 bp of GATK called indels."
+
+From a Biostars post on transforming BAM to FASTA:
+"# Get consensus fastq file
+samtools mpileup -uf REFERENCE.fasta SAMPLE.bam | bcftools call -c | vcfutils.pl vcf2fq > SAMPLE_cns.fastq
+# Convert .fastq to .fasta and set bases of quality lower than 20 to N
+seqtk seq -aQ64 -q20 -n N SAMPLE_cns.fastq > SAMPLE_cns.fasta"
+
+From a Biostars post on transforming a VCF to a FASTA file:
+"You could call variants (using whatever variant calling software you like, GATK, freebayes etc.) from your .bam file and then use vcf-consensus (http://vcftools.sourceforge.net/perl_module.html#vcf-consensus) to build your consensus sequence. The code below should work:
+cat ref.fa | vcf-consensus file.vcf.gz > out.fa"

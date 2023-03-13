@@ -154,6 +154,31 @@ cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{prin
 done
 ```
 
+## 8. Trying to call variants using BCFtools
+# Bcftools
+Anubhabs pipeline:
+```bash
+source activate popgen
+bcftools mpileup -f REF BAM1 BAM2 BAM3  > name.pileup
+bcftools call -c -O v --ploidy-file ploidy.txt -o name.vcf name.pileup
+#ploIDY.TXT contains chromosomeY 1 ENDPOS M 1
+```
+
+My code:
+```bash
+#To compile list of BAM files:
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt | cut -f 1 | while read name; do
+  echo "/shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam ";
+done
+
+#bcftools mpileup:
+bcftools mpileup -f /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/MH341179_Ychromosome.fasta /shared5/Alex/Y-chromosome_project/BAMs/E_102004_EKDN220034353-1A_H5GL5DSX5_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_107013_EKDN220034352-1A_H5GL5DSX5_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_21084_EKDN220034367-1A_H5J5MDSX5_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_23279_merged_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_23416_merged_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_320005_merged_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_32023_merged_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_49031_EKDN220034370-1A_H5J5MDSX5_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/E_519005_EKDN220034364-1A_H5J5MDSX5_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/s2010_EDSW210003772-1a_H3WNKDSX2_L3_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/s2012_EDSW210003766-1a_H3WHWDSX2_L4_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/s479013_EDSW210003775-1a_H3WNKDSX2_L3_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/s49097_EDSW210003769-1a_H3FTWDSX2_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/s49124_EDSW210003767-1a_H3WHWDSX2_L2_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/S276023_EDSW200015547-1a2a_HJFWVDSXY_L3L4_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1527950_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1527947_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1305964_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545178_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545179_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR978597_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR978599_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR978603_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179545_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179555_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545180_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179549_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2731060_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545181_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179547_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545190_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR863167_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2731057_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1527967_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179546_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179552_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179548_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545184_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545183_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179544_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1527969_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1527970_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545188_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR2179556_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545189_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1735862_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545185_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545187_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/ERR1545186_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/SRR12719743_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/SRR12719745_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/SRR12719757_Y_sorted_markdup.bam /shared5/Alex/Y-chromosome_project/BAMs/SRR12719758_Y_sorted_markdup.bam > /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref.pileup
+
+#created ploidy file
+chromosomeY 1 9477672 M 1 > ploidy.txt
+```
+
+
 
 ## 8. Creating consensus FASTA files
 In order to call variants with VCFtools, we first need to create consensus FASTA files using `angsd`:
@@ -173,14 +198,9 @@ done > /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt
 
 ```bash
 cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
-
-  #Defining variables:
   name=$(echo ${line} | awk '{print $1}');
-  number=$(echo ${line} | awk '{print $(NF-1)}');
-  maxnumber=$(echo ${line} | awk '{print $(NF)}');
-
-  #consensus FASTA
-  angsd -i /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam -minMapQ 30 -minQ 20 -setMinDepth ${number} -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta -out /shared5/Alex/Y-chromosome_project/FASTAs/${name}_Y &
+  maxnumber=$(echo ${line} | awk '{print $(NF-1)}');
+  angsd -i /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam -minMapQ 30 -minQ 20 -setMinDepth 5 -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/MH341179_Ychromosome.fasta -out /shared5/Alex/Y-chromosome_project/FASTAs/${name}_5x_horseref_Y &
 done
 ```
 
@@ -198,8 +218,8 @@ Exmoor
 #change header
 cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
   name=$(echo $line | awk '{print $1}');
-  breed=$(echo $line | awk '{print $4}');
-  sed -i "s/>MH341179.1/>${name}_${breed}_MH341179.1/g" /shared5/Alex/Y-chromosome_project/FASTAs/${name}_Y.fa
+  breed=$(echo $line | awk '{print $NF}');
+  sed -i "s/>MH341179.1/>${name}_${breed}_MH341179.1/g" /shared5/Alex/Y-chromosome_project/FASTAs/${name}_5x_horseref_Y.fa
 done
 ```
 
@@ -208,17 +228,17 @@ Then we compile all the FASTAs in one file and add the reference mitogenome as w
 ```bash
 #concatinating FASTAs
 cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | awk '{print $1}' | while read name; do
-  cat /shared5/Alex/Y-chromosome_project/FASTAs/${name}_Y.fa
-done >> Exmoor_horse_Y.fa
+  cat /shared5/Alex/Y-chromosome_project/FASTAs/${name}_5x_horseref_Y.fa
+done >> Exmoor_horse_5x_horseref_Y.fa
 
 
 ## adding reference sequence
-cat /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta Exmoor_horse_Y.fa > tmp.fa && mv tmp.fa Exmoor_horse_Y.fa
+cat /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/MH341179_Ychromosome.fasta Exmoor_horse_5x_horseref_Y.fa > tmp.fa && mv tmp.fa Exmoor_horse_5x_horseref_Y.fa
 ```
 
 #### 8.5 Copy concatinated FASTA file to local disk
 ```bash
-scp studentprojects@young.eng.gla.ac.uk:/shared5/Alex/Y-chromosome_project/FASTAs/Exmoor_horse_Y.fa ./Desktop
+scp studentprojects@young.eng.gla.ac.uk:/shared5/Alex/Y-chromosome_project/FASTAs/Exmoor_horse_5x_horseref_Y.fa ./Desktop
 ```
 
 
@@ -230,4 +250,4 @@ I use Bioedit to view the sequences and align them.
 #### 9.2 Count haplotypes
 Count how many haplotypes there are by using a tree or DNAsp
 
-#### 9.3 Create NEXUS file 
+#### 9.3 Create NEXUS file

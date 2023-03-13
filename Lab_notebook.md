@@ -164,7 +164,7 @@ Submitted mapping of Y-chromsomes (18:11h):
 cat /shared5/Alex/Y-chromosome_project/List_ychromosome.txt | awk '{print $2}' | while read file ; do
   location=$(echo ${file} | awk -F "/" '{$NF=""}1' OFS="/") ;
   name=$(echo ${file} | awk -F "/" '{print $NF}' | sed 's/_1_val_1.fq.gz//');
-  bwa mem /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/horse_Y_chromosome.fasta ${location}${name}_1_val_1.fq.gz ${location}${name}_2_val_2.fq.gz 2> /shared5/Alex/Y-chromosome_project/BAMs/log_files/${name}.bwamem.log > /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y.sam &
+  bwa mem /shared5/Alex/Y-chromosome_project/_chromosome_reference/_chromosome.fasta ${location}${name}_1_val_1.fq.gz ${location}${name}_2_val_2.fq.gz 2> /shared5/Alex/Y-chromosome_project/BAMs/log_files/${name}.bwamem.log > /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y.sam &
 done
 ```
 
@@ -781,10 +781,388 @@ cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt | whil
   angsd -i /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam -minMapQ 30 -minQ 20 -setMinDepth ${number} -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna -out /shared5/Alex/Y-chromosome_project/FASTAs_LipY764/${name}_LipY764 &
 done
 ```
-I rerun the consensus FASTA but at 30x beacause I was getting no bases 
+I rerun the consensus FASTA but at 30x beacause I was getting no bases. Still get no bases.
+
+
+
+# 26/01/23
+Wrote up some of the mtDNA stuff for the report.
+
+Now I want to work on the Y-chromosome BAMs and try to transform them to FASTAs.
+```bash
+# Attempt 1: using HaplotypeCaller (based on Felkel et al., 2019)
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
+  gatk /home/opt/miniconda2/pkgs/gatk-3.8-5/bin/GenomeAnalysisTK -R /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna –I /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam -O /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764.vcf
+done
+
+java -jar GenomeAnalysisTK.jar -T CombineGVCFs -V sample1.g.vcf -V sample2.g.vcf
+–V sampleX.g.vcf -o cohort.g.vcf
+
+#Gives ERROR --> bash: gatk: command not found
+
+# Attempt 2: Using post from biostars post of BAM to FASTA
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
+  samtools mpileup -f /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam | bcftools call -c | vcfutils.pl vcf2fq > /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_cns.fastq &&
+  seqtk seq -aQ64 -q20 -n N SAMPLE_cns.fastq > SAMPLE_cns.fasta
+done
+#Gives error --> Use of uninitialized value $l in numeric lt (<) at /home/opt/miniconda2/bin/vcfutils.pl line 566.
+
+
+# Attempt 3: Using mpileup (based on Wallner et al., 2017)
+cat /shared5/Alex/Y-chromosome_project/List_Y-chromosome_merged.txt | awk '{print $1}' | while read name; do
+  samtools view -h /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam | samtools view -bS - | samtools mpileup -A -u -f /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna - | bcftools view -vcg - | vcfutils.pl varFilter -d 2 -D 200 > /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.vcf
+done
+#Gives error --> [E::cg] unknown type. Accepted types are snps, indels, mnps, other
+```
+
+Redid part of Inbreeding pipeline but using samtools fixmate and markduplicates because Picardtools wasn't working: (submitted 15:49h)
+```bash
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
+  samtools view -h -u -q 30 /shared5/Alex/Inbreeding_project/BAMs/${name}_horseref.sam |  samtools sort -n -o /shared5/Alex/Inbreeding_project/BAMs/${name}_sorted_horseref.bam &
+done
+```
+
+
+
+# 27/01/23
+I try getting the consensus FASTAs for the Ychromosome again but this time with the minimum depth set at 5x:
+```bash
+#consensus FASTAs
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt | while read line; do
+  name=$(echo ${line} | awk '{print $1}');
+  maxnumber=$(echo ${line} | awk '{print $(NF-1)}'); #CHANGE THIS
+  angsd -i /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam -minMapQ 30 -minQ 20 -setMinDepth 5 -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna -out /shared5/Alex/Y-chromosome_project/FASTAs_LipY764/${name}_LipY764 &
+done
+```
+Still not getting any coverage. I submitted the same consensus BAM but with the sorted_rmdp.bam files instead of the sorted_rmdp_MQ20.bam
+
+
+Submitted markdup of inbreeding genomes: (submitted 18:31h)
+```bash
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
+  samtools fixmate -m /shared5/Alex/Inbreeding_project/BAMs/${name}_sorted_horseref.bam - | samtools sort - | samtools markdup - /shared5/Alex/Inbreeding_project/BAMs/${name}_markdup_sorted_horseref.bam &
+done
+```
+
+
+# 29/01/23
+To compare read count of the old and new Ychromosome:
+```bash
+for file in /shared5/Alex/Y-chromosome_project/BAM*/*sorted_*bam; do
+  paste <(samtools view -F 4 -c $file) <(echo $file)
+done
+```
+
+Comparing read count examples:
+- E_102004 Original file --> 4341253 // New file --> 4603163
+  From the qualimap file, the original Ychromsome BAM shows:
+  "mean coverageData = 35.2535X
+    std coverageData = 252.3167X
+
+    There is a 58.84% of reference with a coverageData >= 1X
+    There is a 54.57% of reference with a coverageData >= 2X
+    There is a 49.78% of reference with a coverageData >= 3X
+    There is a 45.14% of reference with a coverageData >= 4X
+    There is a 40.67% of reference with a coverageData >= 5X
+    There is a 36.63% of reference with a coverageData >= 6X
+    There is a 32.98% of reference with a coverageData >= 7X
+    There is a 29.77% of reference with a coverageData >= 8X
+    There is a 26.98% of reference with a coverageData >= 9X
+    There is a 24.63% of reference with a coverageData >= 10X"
+
+    From the new Ychromosome BAM qualimap file:
+    " mean coverageData = 59.8409X
+     std coverageData = 425.015X
+
+     There is a 95.09% of reference with a coverageData >= 1X
+     There is a 87.54% of reference with a coverageData >= 2X
+     There is a 78.47% of reference with a coverageData >= 3X
+     There is a 69.42% of reference with a coverageData >= 4X
+     There is a 60.82% of reference with a coverageData >= 5X
+     There is a 53.26% of reference with a coverageData >= 6X
+     There is a 46.79% of reference with a coverageData >= 7X
+     There is a 41.51% of reference with a coverageData >= 8X
+     There is a 37.15% of reference with a coverageData >= 9X
+     There is a 33.65% of reference with a coverageData >= 10X
+"
+
+It is confusing because the new Ychromosome files appear to have a higher coverage but the FASTAs do not show any bases. Whereas the old Ychromsome files have a lower coverage but actually produce usable FASTAs, I guess this might be an issue with ANGSD. In the meantime, I will run ANGSD conensus FASTA for the old Ychromosome files but at a lower coverage (5x):
+```bash
+# Consensus FASTAs
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
+  name=$(echo ${line} | awk '{print $1}');
+  maxnumber=$(echo ${line} | awk '{print $(NF)}');
+
+  angsd -i /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam -minMapQ 30 -minQ 20 -setMinDepthInd 5 -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/MH341179_Ychromosome.fasta -out /shared5/Alex/Y-chromosome_project/FASTAs/${name}_5x_Y &
+done
+
+# checking reads from FASTA
+for file in *5x*fa; do
+  paste <(grep -v "NNN" $file | wc -l ) <(wc -l $file)
+done
+```
+Weirdly this now produces no results in the FASTA. So I'm going to leave this aside for now.
+
+
+Continuing pipeline for Inbreeding genomes. Merging files:
+```bash
+#loop to print out code of files that need to be merged:
+ll *markdup*bam | awk '{print $9}' | awk '{print substr($0,1,10)}' | uniq -c  | grep -v " 1 " | awk '{print $2}' | cut -d "_" -f 1,2 | while read file; do
+  paste <(echo "samtools merge ${file}_merged_markdup_sorted_horseref.bam") <(ls ${file}*markdup*bam) ;
+done
+ #output:
+samtools merge E_23279_merged_sorted_horseref.bam E_23279_EKDN220034363-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_23279_EKDN220034363-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam
+
+#run code to merge files:
+samtools merge E_23279_merged_markdup_sorted_horseref.bam E_23279_EKDN220034363-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_23279_EKDN220034363-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam; samtools merge E_23416_merged_markdup_sorted_horseref.bam E_23416_EKDN220034368-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_23416_EKDN220034368-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam E_23416_EKDN220034368-1A_H7VL2DSX5_L2_markdup_sorted_horseref.bam; samtools merge E_23434_merged_markdup_sorted_horseref.bam E_23434_EKDN220034361-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_23434_EKDN220034361-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam; samtools merge E_320005_merged_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H7VL2DSX5_L4_markdup_sorted_horseref.bam; samtools merge E_32023_merged_markdup_sorted_horseref.bam E_32023_EKDN220034372-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_32023_EKDN220034372-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam; samtools merge E_479023_merged_markdup_sorted_horseref.bam E_479023_EKDN220034374-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_479023_EKDN220034374-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam  E_479023_EKDN220034374-1A_H7VL2DSX5_L2_markdup_sorted_horseref.bam; samtools merge E_512001_merged_markdup_sorted_horseref.bam E_512001_EKDN220034365-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_512001_EKDN220034365-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam; samtools merge E_78170_merged_markdup_sorted_horseref.bam E_78170_EKDN220034369-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_78170_EKDN220034369-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam  E_78170_EKDN220034369-1A_H7VL2DSX5_L4_markdup_sorted_horseref.bam; samtools merge E_900588_merged_markdup_sorted_horseref.bam E_900588_EKDN220034362-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_900588_EKDN220034362-1A_H7VKVDSX5_L2_markdup_sorted_horseref.bam; samtools merge E_900717_merged_markdup_sorted_horseref.bam E_900717_EKDN220034357-1A_H5CYKDSX5_L4_markdup_sorted_horseref.bam  E_900717_EKDN220034357-1A_H5HJMDSX5_L1_markdup_sorted_horseref.bam
+```
+
+
+# 30/01/23
+Continuing pipeline for Inbreeding genomes. Indexing and Qualimap.
+```bash
+# Indexing
+for file in /shared5/Alex/Inbreeding_project/BAMs*markdup*bam*; do
+  samtools index $file
+done
+
+# Qualimap
+for file in *markdup*bam; do
+  qualimap bamqc -bam $file --java-mem-size=200G &
+done
+```
+
+
+# 31/01/23
+Qualimap of inbreeding genomes:
+```bash
+# Checking qualimap files
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_merged.txt | while read name; do
+  paste <(echo ${name}) <(ls -lh /shared5/Alex/Inbreeding_project/BAMs/${name}*stats/genome_results.txt)
+  grep "mean coverageData" /shared5/Alex/Inbreeding_project/BAMs/${name}*stats/genome_results.txt
+done
+
+# Error --> Many haven't been created due to "Insufficient memory", so I rerun qualimap but without the java-mem-size and with number of threads set to 6. (submitted 13:44):
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_merged.txt | while read file; do
+  qualimap bamqc -nt 6 -bam ${file}_markdup_sorted_horseref.bam &
+done
+
+# `-nt 6` causes insufficient memory error. So I rerun qualimap again:
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_merged.txt | while read file; do
+  qualimap bamqc -bam ${file}_markdup_sorted_horseref.bam --java-mem-size=200G  &
+done
+
+#Qualimap was still giving memory errors so instead I ran the code again but isntead of simultaneously, I made it loop one at a time:
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_merged.txt | while read file; do
+  qualimap bamqc -bam ${file}_markdup_sorted_horseref.bam --java-mem-size=200G
+done
+```
+
+
+# 01/02/23
+Submitted ValidateSamFile for the Inbreeding genomes.
+```bash
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_merged.txt | while read file; do
+  mkdir -p /shared5/Alex/Inbreeding_project/BAMs/ValidateSamFile/
+  java -jar /shared5/Alex/picard-2.27.5/picard.jar ValidateSamFile -I /shared5/Alex/Inbreeding_project/BAMs/${file}_markdup_sorted_horseref.bam -O /shared5/Alex/Inbreeding_project/BAMs/ValidateSamFile/${file}_markdup_sorted_horseref_errors.txt -R /shared5/Alex/Inbreeding_project/horse_WG_reference/GCF_002863925.1_EquCab3.0_genomic.fna --MODE SUMMARY &
+done
+```
+ValidateSamFile info text file not being created due to error:
+"ERROR   2023-02-01 09:32:24     ValidateSamFile Value was put into PairInfoMap more than once.  1: A00551:538:H5J5MDSX5:2:1542:9118:22106"
+
+
+Y-CHROMOSOME --> I talked with Anubhab about not being to create any consensus FASTAs and he say's that the variable "maxnumber" is not calling the values I want. This is because the final column in the "Y-chromosome_ID_depth_list.txt" was formed by breed names but some had spaces inbetween them so that was giving errors. I fixed this but substitituing spaces with underscores and now the correct values are being called so I will run the consensus FASTAs for both the new and old Y-chromosome files again.
+```bash
+#Old Ychromosome files
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list.txt | while read line; do
+  name=$(echo ${line} | awk '{print $1}');
+  maxnumber=$(echo ${line} | awk '{print $(NF-1)}');
+  angsd -i /shared5/Alex/Y-chromosome_project/BAMs/${name}_Y_sorted_markdup.bam -minMapQ 30 -minQ 20 -setMinDepth 5 -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/MH341179_Ychromosome.fasta -out /shared5/Alex/Y-chromosome_project/FASTAs/${name}_5x_horseref_Y &
+done
+
+#New Ychromsome Files
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt | while read line; do
+  name=$(echo ${line} | awk '{print $1}');
+  maxnumber=$(echo ${line} | awk '{print $(NF-1)}');
+  angsd -i /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}_LipY764_sorted_rmdp_MQ20.bam -minMapQ 30 -minQ 20 -setMinDepth 5 -setMaxDepth ${maxnumber} -remove_bads 1 -doFasta 2 -doCounts 1 -ref /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna -out /shared5/Alex/Y-chromosome_project/FASTAs_LipY764/${name}_5x_LipY764_Y &
+done
+```
+Fortunately, the FASTAs created now are much better and have actual coverage.
+```bash
+for file in *5x*fa; do
+  paste <(grep -v "NNN" $file | wc -l ) <(wc -l $file)
+done
+
+# Output of old Ychromosome files:
+38938   189555 E_102004_EKDN220034353-1A_H5GL5DSX5_L2_5x_horseref_Y.fa
+28685   189555 E_107013_EKDN220034352-1A_H5GL5DSX5_L2_5x_horseref_Y.fa
+39416   189555 E_21084_EKDN220034367-1A_H5J5MDSX5_L2_5x_horseref_Y.fa
+(...)
+
+# Output of new Ychromosome files:
+45191   130390 E_102004_EKDN220034353-1A_H5GL5DSX5_L2_5x_LipY764_Y.fa
+26881   130390 E_107013_EKDN220034352-1A_H5GL5DSX5_L2_5x_LipY764_Y.fa
+52996   130399 E_23279_merged_5x_LipY764_Y.fa
+```
+
+And checking qualimap we can see how much each Ychromosome file covers:
+```bash
+#check coverage of old Ychromosome files
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt | awk '{print $1}' | while read name; do
+  paste <(echo $name) <(grep  "coverageData >= 5X" /shared5/Alex/Y-chromosome_project/BAMs/${name}*stats/*txt)
+done
+
+#check coverage of new Ychromosome files
+cat /shared5/Alex/Y-chromosome_project/Y-chromosome_ID_depth_list_new.txt | awk '{print $1}' | while read name; do
+  paste <(echo $name) <(grep  "coverageData >= 5X" /shared5/Alex/Y-chromosome_project/BAMs_LipY764/${name}*stats/*txt)
+done
+```
+
+I then concatenate the old Ychromosome files into respective compliated FASTAs so I can analyze them with DNAsp
+
+
+# 05/02/23
+Concatenating new Ychromosome files:
+```bash
+
+```
+
+USEFUL separate words with TAB: tail head.txt | awk -v OFS="\t" '{$1=$1; print}'
+USEFUL --> see available conda virtual environments: `conda info --envs`
+
+
+# 13/02/23
+In past few days, I have merged the vcfs of the Exmoors and the horses. And I am just started filtering the Exmoor vcfs:
+```bash
+#merged exmoor vcf
+vcftools --vcf /shared5/Alex/Inbreeding_project/variants/merged_exmoor_8-2-2023.vcf --remove-indels --minQ 30 --minGQ 30 --out /shared5/Alex/Inbreeding_project/variants/merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30 --recode
+
+#merged horse vcf
+vcftools --vcf /shared5/Alex/Run1/merged_donkey_8-2-2023.vcf --remove-indels --minQ 30 --minGQ 30 --out /shared5/Alex/Run1/merged_donkey_8-2-2023_rmvIndels_minQ30_minGQ30 --recode
+```
+
+Currently working on variant calling for the Ychromosome following reccomendations by Anubhab:
+```bash
+bcftools call -c -O v --ploidy-file /shared5/Alex/Y-chromosome_project/variants_bcftools/ploidy.txt -o /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref.vcf /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref.pileup
+```
+
+
+
+# 15/02/23
+Did 2nd step of VCF filtering of Exmoor and horse VCFs:
+```bash
+#Exmoor ponies
+vcftools --vcf /shared5/Alex/Inbreeding_project/variants/merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30.recode.vcf --mac 3 --hwe 0.05 --remove-filtered-all --out /shared5/Alex/Inbreeding_project/variants/merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly --recode
+
+#Horses
+vcftools --vcf /shared5/Alex/Run1/merged_donkey_8-2-2023_rmvIndels_minQ30_minGQ30.recode.vcf --mac 3 --hwe 0.05 --remove-filtered-all --out /shared5/Alex/Run1/merged_donkey_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly --recode
+```
+
+Ychromosome steps:
+```bash
+#Variant calling for newref Ychromsome:
+bcftools call -c -O v --ploidy-file /shared5/Alex/Y-chromosome_project/variants_bcftools/ploidy.txt -o /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref.vcf /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref.pileup
+
+#1st step of VCF filtering of newref Ychromosome:
+vcftools --vcf /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref.vcf --remove-indels --minQ 30 --minGQ 30 --out /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref_rmvIndels_minQ30_minGQ30 --recode
+#After filtering, kept 5677718 out of a possible 6265789 Sites
+
+#1st step of VCF filtering of oldref Ychromosome:
+vcftools --vcf /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref.vcf --remove-indels --minQ 30 --minGQ 30 --out /shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref_rmvIndels_minQ30_minGQ30 --recode
+#After filtering, kept 6291005 out of a possible 6584514 Sites
+```
+
+3rd step of VCF filtering - HAVEN'T RUN THIS YET BECAUSE THE SITES RETAINED WITH --MAXMISSING AT 0.8 ARE TOO LOW :
+```bash
+#Exmoors
+vcftools --vcf /shared5/Alex/Inbreeding_project/variants/merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly.recode.vcf --max-missing 0.8 --out /shared5/Alex/Inbreeding_project/variants/merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_maxmissing0.8 --recode
+#after running this code without output and --max-missing 0.8 --> After filtering, kept 748 out of a possible 6710250 Sites
+#after running this code without output and --max-missing 0.5 --> After filtering, kept 161057 out of a possible 6710250 Sites
+
+
+#Horses
+vcftools --vcf /shared5/Alex/Run1/merged_donkey_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly.recode.vcf --max-missing 0.8 --out /shared5/Alex/Run1/merged_donkey_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_maxmissing0.8 --recode
+#after running this code without output and --max-missing 0.8 --> After filtering, kept 4707998 out of a possible 12726242 Sites
+#after running this code without output and --max-missing 0.5 -->
+```
+
+
+
+# 16/02/23
+I copy the oldref semi-filtered Ychromosome VCF to see if I can get it to work in DNAsp:
+```bash
+scp studentprojects@poland.eng.gla.ac.uk:/shared5/Alex/Y-chromosome_project/variants_bcftools/Exmoors_2022_Y_oldref_rmvIndels_minQ30_minGQ30.recode.vcf /drives/C/Users/asus/OneDrive\ -\ University\ of\ Glasgow/UNIVERSITY/5th\ YEAR/Honours\ project/Files/Y-chromosome/
+```
+I don't know why but `scp` doesn't appear to be working and it doesn't copy anything, so instead I download a couple of example VCFs from the internet:
+USEFUL --> download internet files --> `wget "ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/pilot_data/release/2010_07/trio/snps/trio.2010_06.ychr.sites.vcf.gz"`
+However DNAsp doesn't work with VCFs
+
+
+
+# 17/02/23
+Checking mtDNA haplotype networks.
+
+
+# 23/02/23
+Installing "multiqc". I cannot install it with conda or git so I manually install it:
+```bash
+curl -LOk https://github.com/ewels/MultiQC/archive/master.zip
+unzip master.zip
+cd MultiQC-master
+pip install .
+```
+Trying to run MultiQC:
+`/shared5/Alex/software/MultiQC-master/multiqc  /shared5/Alex/Exmoor_sequencing_data/Sep_2020`º
+Doesn't work --> error --> "command not found"
+
+
+REDO INBREEDING PIPELINE WITH ALL EXMOORS:
+Mapping. Submitted (11:34h)
+```bash
+#mapping
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_FASTQ.txt | awk '{print $2}' | while read file ; do
+  location=$(echo ${file} | awk -F "/" '{$NF=""}1' OFS="/") ;
+  name=$(echo ${file} | awk -F "/" '{print $NF}' | sed 's/_1_val_1.fq.gz//');
+  bwa mem /shared5/Alex/Inbreeding_project/horse_WG_reference/GCF_002863925.1_EquCab3.0_genomic.fna   ${location}${name}_1_val_1.fq.gz   ${location}${name}_2_val_2.fq.gz   2> /shared5/Alex/Inbreeding_project/BAMs/log_files/${name}.bwamem.log > /shared5/Alex/Inbreeding_project/BAMs/${name}_horseref.sam &
+done
+
+#sorting
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_FASTQ.txt | awk '{print $1}' | while read name ; do
+  samtools view -h -u -q 30 /shared5/Alex/Inbreeding_project/BAMs/${name}_horseref.sam |  samtools sort -n -o /shared5/Alex/Inbreeding_project/BAMs/${name}_sorted_horseref.bam &
+done
+
+#markdup
+cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
+  samtools fixmate -m /shared5/Alex/Inbreeding_project/BAMs/${name}_sorted_horseref.bam - | samtools sort - | samtools markdup - /shared5/Alex/Inbreeding_project/BAMs/${name}_markdup_sorted_horseref.bam &
+done
+```
+
+REDO Y-chromosome newref but with only Exmoor individuals:
+```bash
+bcftools mpileup -f /shared5/Alex/Y-chromosome_project/horse_Y_chromosome_reference/GCA_002166905.2_LipY764_genomic.fna /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_102004_EKDN220034353-1A_H5GL5DSX5_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_107013_EKDN220034352-1A_H5GL5DSX5_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_21084_EKDN220034367-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_23279_merged_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_23416_merged_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_320005_merged_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_32023_merged_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_49031_EKDN220034370-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/E_519005_EKDN220034364-1A_H5J5MDSX5_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/s2010_EDSW210003772-1a_H3WNKDSX2_L3_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/s2012_EDSW210003766-1a_H3WHWDSX2_L4_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/s479013_EDSW210003775-1a_H3WNKDSX2_L3_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/s49097_EDSW210003769-1a_H3FTWDSX2_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/s49124_EDSW210003767-1a_H3WHWDSX2_L2_LipY764_sorted_rmdp_MQ20.bam /shared5/Alex/Y-chromosome_project/BAMs_LipY764/S276023_EDSW200015547-1a2a_HJFWVDSXY_L3L4_LipY764_sorted_rmdp_MQ20.bam  > /shared5/Alex/Y-chromosome_project/variants_bcftools_onlyexmoors/Exmoors_2022_Y_newref.pileup
+
+bcftools call -c -O v --ploidy-file /shared5/Alex/Y-chromosome_project/variants_bcftools_onlyexmoors/ploidy_newref.txt -o /shared5/Alex/Y-chromosome_project/variants_bcftools_onlyexmoors/Exmoors_2022_Y_newref.vcf /shared5/Alex/Y-chromosome_project/variants_bcftools_onlyexmoors/Exmoors_2022_Y_newref.pileup
+
+#1st step of vcffiltering
+vcftools --vcf /shared5/Alex/Y-chromosome_project/variants_bcftools_onlyexmoors/Exmoors_2022_Y_newref.vcf --remove-indels --minQ 30 --minGQ 30 --out /shared5/Alex/Y-chromosome_project/variants_bcftools_onlyexmoors/Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30 --recode
+
+#2nd step of vcfftilering
+vcftools --vcf Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30.recode.vcf --min-alleles 2 --mac 3 --out Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3 --recode
+
+#create plink file
+vcftools --vcf Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3.recode.vcf --plink --out Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3
+
+#create pca file
+plink --file Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3 --pca --out Exmoors_2022_Y_newref_rmvIndels_minQ30_minGQ30_biallelic_mac3
+```
+
+Check:
+
+- make PCA with Y chromosome data
+- markduplicates of INbreeding pipeline
 
 
 
 
 To access OneDrive files on computer:
-`ll /drives/C/Users/asus/OneDrive\ -\ University\ of\ Glasgow/UNIVERSITY/5th\ YEAR/Honours\ project/Files/`
+cd /drives/C/Users/asus/OneDrive\ -\ University\ of\ Glasgow/UNIVERSITY/5th\ YEAR/Honours\ project/Files/

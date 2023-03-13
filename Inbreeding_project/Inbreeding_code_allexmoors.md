@@ -19,7 +19,7 @@ I will be using a complete horse genome the EquCab3 reference (Genbank ID: NC_00
 
 ### 1. Mapping FASTQs
 ```bash
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $2}' | while read file ; do
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_FASTQ.txt | awk '{print $2}' | while read file ; do
 
   # Defining variables:
   location=$(echo ${file} | awk -F "/" '{$NF=""}1' OFS="/") ; # variable of file path
@@ -36,8 +36,8 @@ done
 
 ### 1.1 Validating SAM Files
 ```bash
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
-  java -jar /shared5/Alex/picard-2.27.5/picard.jar ValidateSamFile -I /shared5/Alex/Inbreeding_project/BAMs/${name}*sam -O  /shared5/Alex/Inbreeding_project/BAMs/${name}_sam_horseref_validate.txt --MODE SUMMARY -R /shared5/Alex/Inbreeding_project/horse_WG_reference/GCF_002863925.1_EquCab3.0_genomic.fna &
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_FASTQ.txt | awk '{print $1}' | while read name ; do
+  java -jar /shared5/Alex/picard-2.27.5/picard.jar ValidateSamFile -I /shared5/Alex/Inbreeding_project/BAMs/${name}*sam -O /shared5/Alex/Inbreeding_project/BAMs/${name}_sam_horseref_validate.txt --MODE SUMMARY -R /shared5/Alex/Inbreeding_project/horse_WG_reference/GCF_002863925.1_EquCab3.0_genomic.fna &
 done
 ```
 
@@ -47,7 +47,7 @@ done
 Now that the SAM files have been created, I convert them to BAM format so they take less space and sort them by reading name using `samtools view` and then `samtools sort`:
 
 ```bash
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_FASTQ.txt | awk '{print $1}' | while read name ; do
   samtools view -h -u -q 30 /shared5/Alex/Inbreeding_project/BAMs/${name}_horseref.sam |  samtools sort -n -o /shared5/Alex/Inbreeding_project/BAMs/${name}_sorted_horseref.bam &
 done
 ```
@@ -56,7 +56,7 @@ done
 ### 3. Marking duplicates
 ```bash
 # Using Samtools markduplicates:
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_FASTQ.txt | awk '{print $1}' | while read name ; do
   samtools fixmate -m /shared5/Alex/Inbreeding_project/BAMs/${name}_sorted_horseref.bam - | samtools sort - | samtools markdup - /shared5/Alex/Inbreeding_project/BAMs/${name}_markdup_sorted_horseref.bam &
 done
 
@@ -82,7 +82,7 @@ done
 samtools merge E_23279_merged_sorted_horseref.bam E_23279_EKDN220034363-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_23279_EKDN220034363-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam
 
 #run code to merge files:
-samtools merge E_23279_merged_markdup_sorted_horseref.bam E_23279_EKDN220034363-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_23279_EKDN220034363-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam; samtools merge E_23416_merged_markdup_sorted_horseref.bam E_23416_EKDN220034368-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_23416_EKDN220034368-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam E_23416_EKDN220034368-1A_H7VL2DSX5_L2_markdup_sorted_horseref.bam; samtools merge E_23434_merged_markdup_sorted_horseref.bam E_23434_EKDN220034361-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_23434_EKDN220034361-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam; samtools merge E_320005_merged_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H7VL2DSX5_L4_markdup_sorted_horseref.bam; samtools merge E_32023_merged_markdup_sorted_horseref.bam E_32023_EKDN220034372-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_32023_EKDN220034372-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam; samtools merge E_479023_merged_markdup_sorted_horseref.bam E_479023_EKDN220034374-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_479023_EKDN220034374-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam  E_479023_EKDN220034374-1A_H7VL2DSX5_L2_markdup_sorted_horseref.bam; samtools merge E_512001_merged_markdup_sorted_horseref.bam E_512001_EKDN220034365-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_512001_EKDN220034365-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam; samtools merge E_78170_merged_markdup_sorted_horseref.bam E_78170_EKDN220034369-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_78170_EKDN220034369-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam  E_78170_EKDN220034369-1A_H7VL2DSX5_L4_markdup_sorted_horseref.bam; samtools merge E_900588_merged_markdup_sorted_horseref.bam E_900588_EKDN220034362-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_900588_EKDN220034362-1A_H7VKVDSX5_L2_markdup_sorted_horseref.bam; samtools merge E_900717_merged_markdup_sorted_horseref.bam E_900717_EKDN220034357-1A_H5CYKDSX5_L4_markdup_sorted_horseref.bam  E_900717_EKDN220034357-1A_H5HJMDSX5_L1_markdup_sorted_horseref.bam
+samtools merge -f E_23279_merged_markdup_sorted_horseref.bam E_23279_EKDN220034363-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_23279_EKDN220034363-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam & samtools merge -f E_23416_merged_markdup_sorted_horseref.bam E_23416_EKDN220034368-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_23416_EKDN220034368-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam E_23416_EKDN220034368-1A_H7VL2DSX5_L2_markdup_sorted_horseref.bam & samtools merge -f E_23434_merged_markdup_sorted_horseref.bam E_23434_EKDN220034361-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_23434_EKDN220034361-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam & samtools merge -f E_320005_merged_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H7VL2DSX5_L4_markdup_sorted_horseref.bam & samtools merge -f E_32023_merged_markdup_sorted_horseref.bam E_32023_EKDN220034372-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_32023_EKDN220034372-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam & samtools merge -f E_479023_merged_markdup_sorted_horseref.bam E_479023_EKDN220034374-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_479023_EKDN220034374-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam  E_479023_EKDN220034374-1A_H7VL2DSX5_L2_markdup_sorted_horseref.bam & samtools merge -f E_512001_merged_markdup_sorted_horseref.bam E_512001_EKDN220034365-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_512001_EKDN220034365-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam & samtools merge -f E_78170_merged_markdup_sorted_horseref.bam E_78170_EKDN220034369-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_78170_EKDN220034369-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam  E_78170_EKDN220034369-1A_H7VL2DSX5_L4_markdup_sorted_horseref.bam & samtools merge -f E_900588_merged_markdup_sorted_horseref.bam E_900588_EKDN220034362-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_900588_EKDN220034362-1A_H7VKVDSX5_L2_markdup_sorted_horseref.bam & samtools merge -f E_900717_merged_markdup_sorted_horseref.bam E_900717_EKDN220034357-1A_H5CYKDSX5_L4_markdup_sorted_horseref.bam  E_900717_EKDN220034357-1A_H5HJMDSX5_L1_markdup_sorted_horseref.bam  & samtools merge s479021_merged_markdup_sorted_horseref.bam s479021_EDSW210003765-1a_H3WHWDSX2_L4_sorted_horseref.bam s479021_EDSW210003765-2a_H2Y75DSX2_L2_sorted_horseref.bam s479021_EDSW210003765-2a_H2Y7CDSX2_L3_sorted_horseref.bam &  samtools merge s49127_merged_markdup_sorted_horseref.bam s49127_EDSW210003774-1a_H3FTWDSX2_L1_sorted_horseref.bam s49127_EDSW210003774-2a_H2Y75DSX2_L4_sorted_horseref.bam s49127_EDSW210003774-2a_H2Y7CDSX2_L3_sorted_horseref.bam
 ```
 
 
@@ -98,42 +98,26 @@ done
 I don't run it in parallel because that was giving me errors.
 ```bash
 cat /shared5/Alex/Inbreeding_project/List_Sep_2022_merged.txt | while read file; do
-  qualimap bamqc -bam ${file}*markdup*bam
+  qualimap bamqc --java-mem-size=200G -bam ${file}*markdup*bam
 done
 ```
-Coverage values:
-```bash
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_merged.txt | awk '{print $1}' | while read name; do
-  paste <(echo $name) <(grep  "mean cov" /shared5/Alex/Inbreeding_project/BAMs/${name}*stats/*txt)
-done
 
-#Output:
-E_102004_EKDN220034353-1A_H5GL5DSX5_L2       mean coverageData = 9.6635X
-E_107013_EKDN220034352-1A_H5GL5DSX5_L2       mean coverageData = 8.1824X
-E_21084_EKDN220034367-1A_H5J5MDSX5_L2        mean coverageData = 7.1676X
-E_21149_EKDN220034359-1A_H5J5MDSX5_L2        mean coverageData = 9.7301X
-E_23279_merged       mean coverageData = 9.2579X
-E_23416_merged       mean coverageData = 9.1787X
-E_23434_merged       mean coverageData = 9.4566X
-E_320005_merged      mean coverageData = 9.3131X
-E_32023_merged       mean coverageData = 9.458X
-E_44009_EKDN220034351-1A_H5GL5DSX5_L2        mean coverageData = 6.8865X
-E_458028_EKDN220034371-1A_H5GL5DSX5_L3       mean coverageData = 10.0208X
-E_479023_merged      mean coverageData = 9.2331X
-E_49031_EKDN220034370-1A_H5J5MDSX5_L2        mean coverageData = 8.8927X
-E_49057_EKDN220034360-1A_H5GL5DSX5_L3        mean coverageData = 9.699X
-E_49121_EKDN220034366-1A_H5J5MDSX5_L2        mean coverageData = 9.1387X
-E_512001_merged      mean coverageData = 9.5115X
-E_519005_EKDN220034364-1A_H5J5MDSX5_L2       mean coverageData = 10.0061X
-E_78170_merged       mean coverageData = 9.3733X
-E_900234_EKDN220034355-1A_H5J5MDSX5_L2       mean coverageData = 10.2442X
-E_900585_EKDN220034354-1A_H5GL5DSX5_L2       mean coverageData = 11.2271X
-E_900588_merged      mean coverageData = 9.6447X
-E_900600_EKDN220034356-1A_H5GL5DSX5_L2       mean coverageData = 9.7229X
-E_900694_EKDN220034350-1A_H5GL5DSX5_L2       mean coverageData = 10.0501X
-E_900717_merged      mean coverageData = 11.5279X
-E_900741_EKDN220034358-1A_H5J5MDSX5_L2       mean coverageData = 10.3231X
+Checking output stats:
+```bash
+
+cat /shared5/Alex/Inbreeding_project/Allexmoor_merged.txt | awk '{print $1}' | while read name; do
+  paste <(echo $name) <(grep  "mean coverageData" /shared5/Alex/Inbreeding_project/BAMs/${name}*stats/*txt) <(grep "number of reads" /shared5/Alex/Inbreeding_project/BAMs/${name}*stats/*txt)
+done
 ```
+
+
+Still missing:
+
+grep: /shared5/Alex/Inbreeding_project/BAMs/s2012_EDSW210003766-1a_H3WHWDSX2_L4*stats/*txt: No such file or directory
+grep: /shared5/Alex/Inbreeding_project/BAMs/s237009_EDSW210003788-1a_H3WNKDSX2_L2*stats/*txt: No such file or directory
+grep: /shared5/Alex/Inbreeding_project/BAMs/s479021_merged*stats/*txt: No such file or directory
+grep: /shared5/Alex/Inbreeding_project/BAMs/s49127_merged*stats/*txt: No such file or directory
+grep: /shared5/Alex/Inbreeding_project/BAMs/S276023_EDSW200015547-1a2a_HJFWVDSXY_L3L4*stats/*txt: No such file or directory
 
 ### 7. Validating BAM Files
 It is important to check the files:
@@ -228,7 +212,6 @@ Then we merge the 2022 and 2021 Exmoor VCFs:
 export PATH=/shared3/Anubhab/miniconda3/bin:$PATH #path to activate vcftools
 
 cd shared5/Alex/software/vcftools/src/perl
-
 ./vcf-merge /shared5/studentprojects/Qikai/Horse_database/fixmate_File/Exmoor_ponies/variants_rehead.vcf.gz /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref_rename.vcf.gz > /shared5/Alex/Inbreeding_project/variants/merged_exmoor_8-2-2023.vcf
 
 ```
@@ -267,7 +250,7 @@ vcftools --vcf merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASS
 
 Anubhab removed several of the indiviudals that had low coverage and the nwe aaply site-mean-depth
 
-4. Remove the top and bottom 2.5% mean site  depth
+4. Remove the top and bottom 2.5% mean site depth
 ```bash
 vcftools --vcf variants_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_maxmissing0.8.recode.vcf --site-mean-depth --out variants_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_maxmissing0.8
 ```
@@ -294,68 +277,5 @@ vcftools --vcf variants_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_maxmissin
 ```
  We have created our final VCF and we can move onto calculating ROH.
 
-
-We have to remove Sex chromosome:
-```bash
-#first we remove maxmissing
-vcftools --vcf merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_nolowDPindv.recode.vcf --max-missing 0.6 --out merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_nolowDPindv_maxmissing0.6 --recode
-
-#then remove sex chromosome
-vcftools --vcf merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_nolowDPindv_maxmissing0.6.recode.vcf --no-chr NC_009175.3 --out merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_nolowDPindv_maxmissing0.6_noNC_009175.3 --recode
-```
-
  ## CALCULATING ROH
 Then BCFtools ROH to calculate ROH in the indivudals
-```bash
-bcftools roh -I --AF-dflt 0.4 -o roh merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_nolowDPindv_mm0.6_meanDPmid95percentile.recode.vcf
-```
-
-
-## SUMMARY STATS WITH VCFTOOLS
-```bash
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --window-pi  10000 --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref_pi #nucleotide diverstiy (https://www-users.york.ac.uk/~dj757/popgenomics/workshop5.html#nucleotide_diversity)
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --relatedness2 --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref #calculate relatedness (https://www.biostars.org/p/111573/)
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref --het  #heterozygosity (https://www.biostars.org/p/266502/)
-Heterozygosity output:
-INDV    O(HOM)  E(HOM)  N_SITES F
-SAMPLE1 57828091        57100008.0      61753464        0.15646
-SAMPLE2 56739198        57100008.0      61753464        -0.07754
-SAMPLE3 51997797        57100008.0      61753464        -1.09643
-SAMPLE4 58358926        57100008.0      61753464        0.27053
-SAMPLE5 57059447        57100008.0      61753464        -0.00872
-SAMPLE6 56815428        57100008.0      61753464        -0.06115
-SAMPLE7 57655935        57100008.0      61753464        0.11947
-SAMPLE8 57258333        57100008.0      61753464        0.03402
-SAMPLE9 57332183        57100008.0      61753464        0.04989
-SAMPLE10        56098162        57100008.0      61753464        -0.21529
-SAMPLE11        57646788        57100008.0      61753464        0.11750
-SAMPLE12        57278381        57100008.0      61753464        0.03833
-SAMPLE13        56238609        57100008.0      61753464        -0.18511
-SAMPLE14        57729341        57100008.0      61753464        0.13524
-SAMPLE15        57458637        57100008.0      61753464        0.07707
-SAMPLE16        57638007        57100008.0      61753464        0.11561
-SAMPLE17        57598145        57100008.0      61753464        0.10705
-SAMPLE18        57250038        57100008.0      61753464        0.03224
-SAMPLE19        57397922        57100008.0      61753464        0.06402
-SAMPLE20        57468722        57100008.0      61753464        0.07923
-SAMPLE21        57420400        57100008.0      61753464        0.06885
-SAMPLE22        57931868        57100008.0      61753464        0.17876
-SAMPLE23        57700529        57100008.0      61753464        0.12905
-SAMPLE24        57099012        57100008.0      61753464        -0.00021
-SAMPLE25        57339998        57100008.0      61753464        0.05157
-
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly.recode.vcf --het
-
-
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref --depth #calculates depth per indivudal
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref.sitedepth --site-mean-depth #calculates depth per site
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref.missingsite --missing-site -#missing data per site
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref.missingind --missing-indv #missing data per individual
-```

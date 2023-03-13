@@ -296,3 +296,9 @@ cat /shared5/Alex/Exmoor/List_Exmoor.txt | awk '{print $2}' | while read file ; 
   bwa mem /shared5/Alex/Donkey_ref/GCF_016077325.2_ASM1607732v2_genomic.fna.gz ${location}${name}_1_val_1.fq.gz ${location}${name}_2_val_2.fq.gz 2> /shared5/Alex/Exmoor/BAMs/log_files/${name}.bwamem.log > /shared5/Alex/Exmoor/BAMs/${name}_DonkeyRef.sam &
 done
 ```
+
+
+Samples from Run2: E_21149 E_102004 E_107013 E_21084 ERR1305962 ERR1305964 ERR1306526 ERR1527948 ERR1527950 ERR1527952 ERR1527958 ERR1527966 ERR1527969 ERR1527970 ERR1527972 ERR1545180 ERR1545181 ERR1545184 ERR1545185 ERR1545187 ERR1545188 ERR1545190 ERR2179545 ERR2179547 ERR2179548 ERR2179550 ERR2179554 ERR2179555 ERR2179556 ERR2731056 ERR2731060 ERR863167 ERR868003 ERR978597 ERR978599 SRR12719745 SRR12719757 SRR12719758
+
+changing the name of the samples in the header:
+tabix -r head.txt merged_Run2.vcf.gz > merged_Run2_rename.vcf.gz

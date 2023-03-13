@@ -1,4 +1,4 @@
-# Code for Run1 of phylogeny of Exmoor ponies and horses
+1# Code for Run1 of phylogeny of Exmoor ponies and horses
 
 ---
 * Title: Code for Run1 of Exmoor and horse phylogeny
@@ -305,7 +305,7 @@ I used `strelka` for variant calling of the genomes because it is quicker than `
 mkdir Run1
 ```
 
-2.	Then I created a Strelka script that follows the follwoing template :
+2.	Then I created a Strelka script that follows the following template :
 
 ```bash
 #content of strelka script:
@@ -382,7 +382,7 @@ vcftools --gzvcf variants.vcf.gz --remove-indels --minQ 30 --minGQ 30 --out ../.
 * `--out`: *Specify output file name and location*
 * `-recode`: *Generates a new file with applied filters*
 
-2.	The second filter is a minimum allele count and also removes non-neutrak alleles:
+2.	The second filter is a minimum allele count and also removes non-neutral alleles:
 ```bash
 vcftools --vcf variants_rmvIndels_minQ30_minGQ30.recode.vcf --mac 3 --hwe 0.05 --remove-filtered-all --out variants_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly –recode
 ```
@@ -430,3 +430,40 @@ vcftools --vcf variants_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_maxmissin
 ```
 * `min-meanDP`: *Includes only sites with mean depth values (over all included individuals) greater than or equal to the value.*
 * `max-meanDP`: *Includes only sites with mean depth values (over all included individuals) less than or equal to the "--max-meanDP" value.*
+
+
+
+
+
+## Other steps (10/02/23)
+
+```bash
+less /shared5/Alex/Run1/results/variants/variants.vcf.gz | head -n 50000 | grep -e "#" > head.txt
+
+#Then I replace the names of the samples with the ID names in the head.txt file
+
+#Then I change the name of the header:
+tabix -r head.txt /shared5/Alex/Run1/results/variants/variants.vcf.gz > /shared5/Alex/Run1/results/variants/variants_rename.vcf.gz
+
+#Then we index this new vcf file:
+tabix -p vcf /shared5/Alex/Run1/results/variants/variants_rename.vcf.gz
+
+#NEXT STEP: merge the VCFs from Run1 and Run2:
+cd /shared5/Alex/software/vcftools/src/perl
+
+./vcf-merge /shared5/Alex/Run1/results/variants/variants_rename.vcf.gz /shared5/Alex/Run2/merged_Run2_rename.vcf.gz > /shared5/Alex/Run1/merged_donkey_8-2-2023.vcf
+```
+
+### VCF filtering of merged VCFs
+
+```bash
+#1. Removing INDELs
+vcftools --vcf /shared5/Alex/Run1/merged_donkey_8-2-2023.vcf --remove-indels --minQ 30 --minGQ 30 --out /shared5/Alex/Run1/merged_donkey_8-2-2023_rmvIndels_minQ30_minGQ30 --recode
+
+#2. MAC and non-neutral alleles
+vcftools --vcf /shared5/Alex/Run1/merged_donkey_8-2-2023_rmvIndels_minQ30_minGQ30.recode.vcf --mac 3 --hwe 0.05 --remove-filtered-all --out /shared5/Alex/Run1/merged_donkey_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly --recode
+
+#3 .
+vcftools --vcf /shared5/Alex/Run1/merged_donkey_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly.recode.vcf --max-missing 0.8 --out /shared5/Alex/Run1/merged_donkey_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_maxmissing0.8 --recode
+
+```
