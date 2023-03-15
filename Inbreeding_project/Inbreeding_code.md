@@ -1,7 +1,7 @@
-# Code for Inbreeding of Exmoor ponies
+# Code for genetic diversity and inbreeding analysis of Exmoor ponies
 
 ---
-* Title: Code for Inbreeding of Exmoor ponies
+* Title: Code for genetic diversity and inbreeding analysis of Exmoor ponies
 * Author: Alexandra Brumwell
 ---
 
@@ -9,7 +9,7 @@ Code notebook for honours project on Exmoor pony populations genetics
 
 --------------------------------------------------------------------------------------------
 ## Introduction
-This aims to look at inbreeding and mutational load of Exmoor ponies
+This aims to look at genetic diversity and inbreeding of the Exmoor pony sequences.
 
 ### Downloading a reference genome
 I will be using a complete horse genome the EquCab3 reference (Genbank ID: NC_009144.3).
@@ -19,7 +19,7 @@ I will be using a complete horse genome the EquCab3 reference (Genbank ID: NC_00
 
 ### 1. Mapping FASTQs
 ```bash
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $2}' | while read file ; do
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_FASTQ.txt | awk '{print $2}' | while read file ; do
 
   # Defining variables:
   location=$(echo ${file} | awk -F "/" '{$NF=""}1' OFS="/") ; # variable of file path
@@ -33,56 +33,53 @@ cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $2}' 
   > /shared5/Alex/Inbreeding_project/BAMs/${name}_horseref.sam &  # output file location and name
 done
 ```
-
-### 1.1 Validating SAM Files
-```bash
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
-  java -jar /shared5/Alex/picard-2.27.5/picard.jar ValidateSamFile -I /shared5/Alex/Inbreeding_project/BAMs/${name}*sam -O  /shared5/Alex/Inbreeding_project/BAMs/${name}_sam_horseref_validate.txt --MODE SUMMARY -R /shared5/Alex/Inbreeding_project/horse_WG_reference/GCF_002863925.1_EquCab3.0_genomic.fna &
-done
-```
-
+***Note on code formatting:*** *\"\\" at the end of a line means that the command continues in the following line of code. In other words, the five lines of code in the `bwa mem` command are usually written in one line but, in this case, it is more visual to see each argument on a different line*
 
 
 ### 2. Converting to BAM and sorting
 Now that the SAM files have been created, I convert them to BAM format so they take less space and sort them by reading name using `samtools view` and then `samtools sort`:
 
 ```bash
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_FASTQ.txt | awk '{print $1}' | while read name ; do
   samtools view -h -u -q 30 /shared5/Alex/Inbreeding_project/BAMs/${name}_horseref.sam |  samtools sort -n -o /shared5/Alex/Inbreeding_project/BAMs/${name}_sorted_horseref.bam &
 done
 ```
+> `samtools view` options:
+* `-q`: *Minimal mapping quality*. Basic quality filter that skips alignments with a mapping quality smaller than the set value (in this case 30)
+* `-u`: *Output uncompressed data*. Preferred when piping to another samtools command.
+
+> `samtools sort`options:
+* `-n`: *Sort by read names rather than by chromosomal coordinates.*. We are sorting by read name for later steps
+* `-o`: *Write the final sorted output to specified file name*
+
 
 
 ### 3. Marking duplicates
+I use `samtools markdup`, but prior to this, the files need to be processed with `samtools fixmate` and then sorted by coordinate using `samtools sort`:
+
 ```bash
-# Using Samtools markduplicates:
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_FASTQ.txt | awk '{print $1}' | while read name ; do
   samtools fixmate -m /shared5/Alex/Inbreeding_project/BAMs/${name}_sorted_horseref.bam - | samtools sort - | samtools markdup - /shared5/Alex/Inbreeding_project/BAMs/${name}_markdup_sorted_horseref.bam &
 done
-
-# Originally tried using Picardtools Markduplicates but it didn't work; it didn't create any output file beacuse there were repeated reads or something like that
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_FASTQ.txt | awk '{print $1}' | while read name ; do
-  java -Xmx4g -jar /shared5/Alex/picard-2.27.5/picard.jar MarkDuplicates  \
-    -I /shared5/Alex/Inbreeding_project/BAMs/${name}_sorted_horseref.bam \ # input file
-    -O /shared5/Alex/Inbreeding_project/BAMs/${name}_rmdp_sorted_horseref.bam \ #output file
-    -M /shared5/Alex/Inbreeding_project/BAMs/log_files/${name}_markdup_metrics.txt \ # text file with marked_dup_metrics
-    --REMOVE_DUPLICATES true --ASSUME_SORT_ORDER coordinate --VALIDATION_STRINGENCY SILENT & \
-done
 ```
+> `samtools fixmate` options:
+* `-m`: *Adds a mate score tags* These are used by markdup to select the best reads to keep.
+* `-`: pipe output
+
+> `samtools sort` options:
+* *Note: you don't need to specify sorting by coordinate because that is the default option*
+*`-`: pipe output
+
+> `samtools markdup` options:
+* `-`: pipe input
 
 
 ### 4. Merging BAM files
-Merge whichever individuals have several files:
-```bash
-#loop to print out code of files that need to be merged:
-ll *markdup*bam | awk '{print $9}' | awk '{print substr($0,1,10)}' | uniq -c  | grep -v " 1 " | awk '{print $2}' | cut -d "_" -f 1,2 | while read file; do
-  paste <(echo "samtools merge ${file}_merged_markdup_sorted_horseref.bam") <(ls ${file}*markdup*bam) ;
-done
- #output:
-samtools merge E_23279_merged_sorted_horseref.bam E_23279_EKDN220034363-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_23279_EKDN220034363-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam
+Since some of the BAM files I have come from the same indivdual, I merge them together. belong to the same individual, I have to merge the corresponding BAM files together.
 
-#run code to merge files:
-samtools merge E_23279_merged_markdup_sorted_horseref.bam E_23279_EKDN220034363-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_23279_EKDN220034363-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam; samtools merge E_23416_merged_markdup_sorted_horseref.bam E_23416_EKDN220034368-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_23416_EKDN220034368-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam E_23416_EKDN220034368-1A_H7VL2DSX5_L2_markdup_sorted_horseref.bam; samtools merge E_23434_merged_markdup_sorted_horseref.bam E_23434_EKDN220034361-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_23434_EKDN220034361-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam; samtools merge E_320005_merged_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam E_320005_EKDN220034373-1A_H7VL2DSX5_L4_markdup_sorted_horseref.bam; samtools merge E_32023_merged_markdup_sorted_horseref.bam E_32023_EKDN220034372-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_32023_EKDN220034372-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam; samtools merge E_479023_merged_markdup_sorted_horseref.bam E_479023_EKDN220034374-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_479023_EKDN220034374-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam  E_479023_EKDN220034374-1A_H7VL2DSX5_L2_markdup_sorted_horseref.bam; samtools merge E_512001_merged_markdup_sorted_horseref.bam E_512001_EKDN220034365-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam  E_512001_EKDN220034365-1A_H7VKMDSX5_L3_markdup_sorted_horseref.bam; samtools merge E_78170_merged_markdup_sorted_horseref.bam E_78170_EKDN220034369-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_78170_EKDN220034369-1A_H7VKMDSX5_L1_markdup_sorted_horseref.bam  E_78170_EKDN220034369-1A_H7VL2DSX5_L4_markdup_sorted_horseref.bam; samtools merge E_900588_merged_markdup_sorted_horseref.bam E_900588_EKDN220034362-1A_H5J5MDSX5_L2_markdup_sorted_horseref.bam E_900588_EKDN220034362-1A_H7VKVDSX5_L2_markdup_sorted_horseref.bam; samtools merge E_900717_merged_markdup_sorted_horseref.bam E_900717_EKDN220034357-1A_H5CYKDSX5_L4_markdup_sorted_horseref.bam  E_900717_EKDN220034357-1A_H5HJMDSX5_L1_markdup_sorted_horseref.bam
+I compile the IDs of the indivudals that are spearted into multiple files and use `samtools merge`:
+```bash
+samtools merge <output file> <input file1> input file2>
 ```
 
 
@@ -94,51 +91,30 @@ for file in /shared5/Alex/Inbreeding_project/BAMs*markdup*bam*; do
 done
 ```
 
-### 6. Qualimap
-I don't run it in parallel because that was giving me errors.
+### 6. Calculating BAM coverage
+I use `qualimap bamqc` to calculate the coverage of the BAM files [(qualimap bamqc manual)](http://qualimap.conesalab.org/doc_html/analysis.html#bamqc).
+
+*Important to note:* There is no need to specify an output as qualimap creates an output folder containing the stats results.
+
 ```bash
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_merged.txt | while read file; do
-  qualimap bamqc -bam ${file}*markdup*bam
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_merged.txt | awk '{print $1}' | while read name ; do
+  qualimap bamqc -bam /shared5/Alex/Inbreeding_project/BAMs/${name}_*markdup*bam \
+  --java-mem-size=200G \ #Sets desired memory size
 done
 ```
-Coverage values:
+
+To check the coverage of each file:
+
 ```bash
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_merged.txt | awk '{print $1}' | while read name; do
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_merged.txt | awk '{print $1}' | while read name; do
   paste <(echo $name) <(grep  "mean cov" /shared5/Alex/Inbreeding_project/BAMs/${name}*stats/*txt)
 done
-
-#Output:
-E_102004_EKDN220034353-1A_H5GL5DSX5_L2       mean coverageData = 9.6635X
-E_107013_EKDN220034352-1A_H5GL5DSX5_L2       mean coverageData = 8.1824X
-E_21084_EKDN220034367-1A_H5J5MDSX5_L2        mean coverageData = 7.1676X
-E_21149_EKDN220034359-1A_H5J5MDSX5_L2        mean coverageData = 9.7301X
-E_23279_merged       mean coverageData = 9.2579X
-E_23416_merged       mean coverageData = 9.1787X
-E_23434_merged       mean coverageData = 9.4566X
-E_320005_merged      mean coverageData = 9.3131X
-E_32023_merged       mean coverageData = 9.458X
-E_44009_EKDN220034351-1A_H5GL5DSX5_L2        mean coverageData = 6.8865X
-E_458028_EKDN220034371-1A_H5GL5DSX5_L3       mean coverageData = 10.0208X
-E_479023_merged      mean coverageData = 9.2331X
-E_49031_EKDN220034370-1A_H5J5MDSX5_L2        mean coverageData = 8.8927X
-E_49057_EKDN220034360-1A_H5GL5DSX5_L3        mean coverageData = 9.699X
-E_49121_EKDN220034366-1A_H5J5MDSX5_L2        mean coverageData = 9.1387X
-E_512001_merged      mean coverageData = 9.5115X
-E_519005_EKDN220034364-1A_H5J5MDSX5_L2       mean coverageData = 10.0061X
-E_78170_merged       mean coverageData = 9.3733X
-E_900234_EKDN220034355-1A_H5J5MDSX5_L2       mean coverageData = 10.2442X
-E_900585_EKDN220034354-1A_H5GL5DSX5_L2       mean coverageData = 11.2271X
-E_900588_merged      mean coverageData = 9.6447X
-E_900600_EKDN220034356-1A_H5GL5DSX5_L2       mean coverageData = 9.7229X
-E_900694_EKDN220034350-1A_H5GL5DSX5_L2       mean coverageData = 10.0501X
-E_900717_merged      mean coverageData = 11.5279X
-E_900741_EKDN220034358-1A_H5J5MDSX5_L2       mean coverageData = 10.3231X
 ```
 
 ### 7. Validating BAM Files
 It is important to check the files:
 ```bash
-cat /shared5/Alex/Inbreeding_project/List_Sep_2022_merged.txt | while read file; do
+cat /shared5/Alex/Inbreeding_project/List_allexmoors_merged.txt | while read file; do
   mkdir -p /shared5/Alex/Inbreeding_project/BAMs/ValidateSamFile/
   java -jar /shared5/Alex/picard-2.27.5/picard.jar ValidateSamFile \
   -I /shared5/Alex/Inbreeding_project/BAMs/${file}_markdup_sorted_horseref.bam \
@@ -149,9 +125,10 @@ done
 ```
 
 
-## VARIANT CALLING using Strelka
+### 8. Variant calling
+Since a VCF had already been created using the 2020 and 2021 sequences, I only call variants from the 2022 sequences.
 
-### 1. Strelka
+#### 8.1 Strelka
 Preparing for strelka:
  ```bash
 #Create a directory for each chromosome.
@@ -176,21 +153,21 @@ for file in {144..175}; do
   tabix -f -p bed NC_009${file}.3/NC_009${file}.3.bed.gz
 done
 
-#I copy the configure_strelka file form Run2 and edit it:
-cat List_Sep_2022_merged.txt | while read name ; do
-  echo "--bam /shared5/Alex/Inbreeding_project/BAMs/${name}_markdup_sorted_horseref.bam \\";
-done
+#I create a configure_strelka file with all the pathfiles to the bams and then run it :
+bash /shared5/Alex/Inbreeding_project/variants_allexmoors/configure_strelka.sh
 ```
 
-Running strelka:
+The configure strelka script has created a pyhton file in each variant directory so now I run strelka:
 ```bash
 for dir in /shared5/Alex/Inbreeding_project/variants/* ; do
   ${dir}/Out/runWorkflow.py -m local -j 2 &
 done
 ```
+This creates a VCF file with the variants from the 2022 Exmoor pony sequences
 
-### 2. Gather VCFs
-Now the VCFs have been created for our files. We will merge them using the gathervcf script. Structure of the script is:
+
+#### 8.2 Gather VCFs
+Then I want to compile the VCFs of each chromosome into one VCF file. I will merge them using the gathervcf script. Structure of the script is:
 "picard GatherVcfs \
 I=NC_052177/Out/results/variants/variants.vcf.gz \
 I=NC_052178/Out/results/variants/variants.vcf.gz
@@ -202,42 +179,18 @@ for num in {144..175}; do
   echo "I=NC_009${num}.3/Out/results/variants/variants.vcf.gz \\"
 done
 ```
-
-Then, want to change the header of this new vcf file:
+Then, I run the script:
 ```bash
-#select header and save in new file
-less results/variants/variants.vcf.gz | head -n 50000 | grep -e "#" > head.txt
-
-#Then I replace the line of "#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  SAMPLE1 SAMPLE2 SAMPLE3 SAMPLE4 SAMPLE5 SAMPLE6 SAMPLE7 SAMPLE8 SAMPLE9 SAMPLE10  SAMPLE11 SAMPLE12        SAMPLE13        SAMPLE14        SAMPLE15        SAMPLE16        SAMPLE17        SAMPLE18        SAMPLE19        SAMPLE20        SAMPLE21   SAMPLE22        SAMPLE23        SAMPLE24        SAMPLE25" with the sample names from the configure strelka file. So the final line is: "
-#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  E_102004        E_107013        E_21084 E_21149 E_23279 E_23416 E_23434 E_320005  E_32023  E_44009 E_458028        E_479023        E_49031 E_49057 E_49121 E_512001        E_519005        E_78170 E_900234        E_900585        E_900588  E_900600 E_900694        E_900717        E_900741"
-
-#I make sure that the strings are separated by tab by using
-tail head.txt | awk -v OFS="\t" '{$1=$1; print}'
-
-#then need to merge the header with the VCF:
-tabix -r head.txt merged_Exmoor2022horseref.vcf.gz > merged_Exmoor2022horseref_rename.vcf.gz
-
-#Then we index this new vcf file:
-tabix -p vcf merged_exmoor_8-2-2023.vcf.gz
+bash gathervcf.sh
 ```
 
-
-
-Then we merge the 2022 and 2021 Exmoor VCFs:
+#### 8.3 Merge VCFs
+Now I want to merge the VCF that contains the 2022 samples with the previously created VCF that has the 2020 and 2021 sequences:
 ```bash
-export PATH=/shared3/Anubhab/miniconda3/bin:$PATH #path to activate vcftools
-
-cd shared5/Alex/software/vcftools/src/perl
-
 ./vcf-merge /shared5/studentprojects/Qikai/Horse_database/fixmate_File/Exmoor_ponies/variants_rehead.vcf.gz /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref_rename.vcf.gz > /shared5/Alex/Inbreeding_project/variants/merged_exmoor_8-2-2023.vcf
-
 ```
 
-VCFTOOLS --> export PATH=/shared3/Anubhab/miniconda3/bin:$PATH
-
-
-
-## VCF FILTERING
+### 9. VCF filtering
 Now that the VCF file has been created it is important to filter the variants. I use `VCFtools` for this.
 
 1.	The first filter removes insertions and deletions and low quality positions and variants:
@@ -267,13 +220,13 @@ vcftools --vcf merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASS
 
 Anubhab removed several of the indiviudals that had low coverage and the nwe aaply site-mean-depth
 
-4. Remove the top and bottom 2.5% mean site  depth
+4. Remove the top and bottom 2.5% mean site depth
 ```bash
 vcftools --vcf variants_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_maxmissing0.8.recode.vcf --site-mean-depth --out variants_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_maxmissing0.8
 ```
 * `--site-mean-depth`: *Generates a file containing the mean depth per site averaged across all individuals*
 
-Then we use R to calculate the top and bottom 2.5% quartile:
+Then I use R to calculate the top and bottom 2.5% quartile:
 ```R
 R # This activates R in the command line
 
@@ -287,75 +240,18 @@ quantile(data$MEAN_DEPTH, probs=c(0.0275, 0.975)
 q() # quits R
 ```
 
-
-Finally, to keep only the 95% quartile of mean loci depth, we use VCFtools again:
+Finally, to keep only the 95% quartile of mean loci depth, I use VCFtools again:
 ```bash
 vcftools --vcf variants_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_maxmissing0.8.recode.vcf --min-meanDP 9.7 --max-meanDP 14.4 --out variants_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_maxmissing0.8_meanDPmid95percentile --recode
 ```
  We have created our final VCF and we can move onto calculating ROH.
 
 
-We have to remove Sex chromosome:
+Unfortunately, this final, filtered file has very few sites and contains only 15 of the inital 55 individuals.
+
+### 9. Homozygosity and inbreeding using VCFtools
+Since the filtered merged file has veyr low quality data, I decide to use the inital VCF file I created that had only had sequences from 2022.
+
 ```bash
-#first we remove maxmissing
-vcftools --vcf merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_nolowDPindv.recode.vcf --max-missing 0.6 --out merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_nolowDPindv_maxmissing0.6 --recode
-
-#then remove sex chromosome
-vcftools --vcf merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_nolowDPindv_maxmissing0.6.recode.vcf --no-chr NC_009175.3 --out merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_nolowDPindv_maxmissing0.6_noNC_009175.3 --recode
-```
-
- ## CALCULATING ROH
-Then BCFtools ROH to calculate ROH in the indivudals
-```bash
-bcftools roh -I --AF-dflt 0.4 -o roh merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly_nolowDPindv_mm0.6_meanDPmid95percentile.recode.vcf
-```
-
-
-## SUMMARY STATS WITH VCFTOOLS
-```bash
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --window-pi  10000 --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref_pi #nucleotide diverstiy (https://www-users.york.ac.uk/~dj757/popgenomics/workshop5.html#nucleotide_diversity)
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --relatedness2 --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref #calculate relatedness (https://www.biostars.org/p/111573/)
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref --het  #heterozygosity (https://www.biostars.org/p/266502/)
-Heterozygosity output:
-INDV    O(HOM)  E(HOM)  N_SITES F
-SAMPLE1 57828091        57100008.0      61753464        0.15646
-SAMPLE2 56739198        57100008.0      61753464        -0.07754
-SAMPLE3 51997797        57100008.0      61753464        -1.09643
-SAMPLE4 58358926        57100008.0      61753464        0.27053
-SAMPLE5 57059447        57100008.0      61753464        -0.00872
-SAMPLE6 56815428        57100008.0      61753464        -0.06115
-SAMPLE7 57655935        57100008.0      61753464        0.11947
-SAMPLE8 57258333        57100008.0      61753464        0.03402
-SAMPLE9 57332183        57100008.0      61753464        0.04989
-SAMPLE10        56098162        57100008.0      61753464        -0.21529
-SAMPLE11        57646788        57100008.0      61753464        0.11750
-SAMPLE12        57278381        57100008.0      61753464        0.03833
-SAMPLE13        56238609        57100008.0      61753464        -0.18511
-SAMPLE14        57729341        57100008.0      61753464        0.13524
-SAMPLE15        57458637        57100008.0      61753464        0.07707
-SAMPLE16        57638007        57100008.0      61753464        0.11561
-SAMPLE17        57598145        57100008.0      61753464        0.10705
-SAMPLE18        57250038        57100008.0      61753464        0.03224
-SAMPLE19        57397922        57100008.0      61753464        0.06402
-SAMPLE20        57468722        57100008.0      61753464        0.07923
-SAMPLE21        57420400        57100008.0      61753464        0.06885
-SAMPLE22        57931868        57100008.0      61753464        0.17876
-SAMPLE23        57700529        57100008.0      61753464        0.12905
-SAMPLE24        57099012        57100008.0      61753464        -0.00021
-SAMPLE25        57339998        57100008.0      61753464        0.05157
-
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/merged_exmoor_8-2-2023_rmvIndels_minQ30_minGQ30_mac3_hwe0.05_PASSonly.recode.vcf --het
-
-
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref --depth #calculates depth per indivudal
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref.sitedepth --site-mean-depth #calculates depth per site
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref.missingsite --missing-site -#missing data per site
-
-vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref.missingind --missing-indv #missing data per individual
+vcftools --gzvcf /shared5/Alex/Inbreeding_project/variants/merged_Exmoor2022horseref.vcf.gz --out /shared5/Alex/Inbreeding_project/variants/vcftools_summarystats/merged_Exmoor2022horseref --het
 ```
